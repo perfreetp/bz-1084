@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useUserStore } from "@/store/useUserStore";
 import { useFavoriteStore } from "@/store/useFavoriteStore";
+import { useWallpaperStore } from "@/store/useWallpaperStore";
 import { useToast } from "@/hooks/useToast";
 import { authors } from "@/data/authors";
 import { allTags } from "@/data/tags";
@@ -472,6 +473,7 @@ function SubscriptionSection({
   notificationsEnabled: boolean;
 }) {
   const { notifications, addNotification } = useFavoriteStore();
+  const { wallpapers } = useWallpaperStore();
   const [subTab, setSubTab] = useState<SubscriptionTab>("subscribed");
 
   const subscribedAuthors = useMemo(() => authors.filter((a) => isSubscribed(a.id)), [isSubscribed]);
@@ -496,6 +498,36 @@ function SubscriptionSection({
         wallpaperThumbnail: n.wallpaperThumbnail,
       }));
   }, [notifications, subscribedAuthors]);
+
+  const getAuthorLatestThumbnail = (authorId: string): string | undefined => {
+    const authorNotifications = notifications
+      .filter((n) => n.authorId === authorId && n.type === "subscription_update" && n.wallpaperThumbnail)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    if (authorNotifications.length > 0) {
+      return authorNotifications[0].wallpaperThumbnail;
+    }
+    const authorWallpapers = wallpapers
+      .filter((w) => w.authorId === authorId)
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+    if (authorWallpapers.length > 0) {
+      return authorWallpapers[0].thumbnailUrl;
+    }
+    return undefined;
+  };
+
+  const getAuthorUpdateFrequency = (authorId: string) => {
+    const count = notifications.filter(
+      (n) => n.authorId === authorId && n.type === "subscription_update"
+    ).length;
+    if (count >= 4) return { label: "高频更新", color: "bg-red-500/15 text-red-400 border-red-500/30" };
+    if (count >= 2) return { label: "稳定更新", color: "bg-green-500/15 text-green-400 border-green-500/30" };
+    return { label: "较少更新", color: "bg-gray-500/15 text-gray-400 border-gray-500/30" };
+  };
+
+  const getAuthorSubscribedAt = (authorId: string): string | undefined => {
+    const sub = subscriptions.find((s) => s.authorId === authorId);
+    return sub ? formatDate(sub.subscribedAt) : undefined;
+  };
 
   const handleSubscribe = (authorId: string, authorName: string) => {
     subscribe(authorId);
@@ -640,48 +672,76 @@ function SubscriptionSection({
               </div>
             ) : (
               <div className="space-y-3">
-                {subscribedAuthors.map((author) => (
-                  <div
-                    key={author.id}
-                    className="flex items-center gap-4 p-4 bg-surface rounded-xl border border-border hover:border-primary/30 transition-colors"
-                  >
-                    <img
-                      src={author.avatarUrl}
-                      alt={author.name}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-100">{author.name}</p>
-                      <p className="text-sm text-gray-400 truncate">{author.bio}</p>
-                      <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <ImageIcon className="w-3 h-3" />
-                          {author.wallpaperCount} 张壁纸
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Heart className="w-3 h-3" />
-                          {author.followerCount.toLocaleString()} 关注
-                        </span>
+                {subscribedAuthors.map((author) => {
+                  const latestThumbnail = getAuthorLatestThumbnail(author.id);
+                  const freq = getAuthorUpdateFrequency(author.id);
+                  const subscribedAt = getAuthorSubscribedAt(author.id);
+                  return (
+                    <div
+                      key={author.id}
+                      className="flex items-center gap-4 p-4 bg-surface rounded-xl border border-border hover:border-primary/30 transition-colors"
+                    >
+                      <img
+                        src={author.avatarUrl}
+                        alt={author.name}
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-100">{author.name}</p>
+                        <p className="text-sm text-gray-400 truncate">{author.bio}</p>
+                        <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <ImageIcon className="w-3 h-3" />
+                            {author.wallpaperCount} 张壁纸
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Heart className="w-3 h-3" />
+                            {author.followerCount.toLocaleString()} 关注
+                          </span>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${freq.color}`}>
+                            {freq.label}
+                          </span>
+                          {subscribedAt && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              订阅于 {subscribedAt}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {latestThumbnail && (
+                          <div className="relative group" title="最近作品">
+                            <img
+                              src={latestThumbnail}
+                              alt="最近作品"
+                              className="w-12 h-12 rounded-lg object-cover border border-border"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                              <ImageIcon className="w-5 h-5 text-white" />
+                            </div>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewWorks(author.id)}
+                            className="btn-ghost text-primary hover:bg-primary/10"
+                          >
+                            <Eye className="w-4 h-4 mr-1" />
+                            查看作品
+                          </button>
+                          <button
+                            onClick={() => handleUnsubscribe(author.id, author.name)}
+                            className="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            取消订阅
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleViewWorks(author.id)}
-                        className="btn-ghost text-primary hover:bg-primary/10"
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        查看作品
-                      </button>
-                      <button
-                        onClick={() => handleUnsubscribe(author.id, author.name)}
-                        className="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        取消订阅
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
@@ -876,6 +936,8 @@ function NotificationsSection({
   const [activeAuthorFilter, setActiveAuthorFilter] = useState<string>("all");
   const [authorDropdownOpen, setAuthorDropdownOpen] = useState(false);
   const [state, setState] = useState(notificationSettings);
+  const [viewMode, setViewMode] = useState<"timeline" | "by_author">("timeline");
+  const [expandedAuthorId, setExpandedAuthorId] = useState<string | null>(null);
 
   const unreadCount = useMemo(() => getUnreadCount(), [notifications, getUnreadCount]);
 
@@ -943,6 +1005,36 @@ function NotificationsSection({
     return base.length;
   };
 
+  const authorGroups = useMemo(() => {
+    const map = new Map<string, { authorId: string; authorName: string; authorAvatar?: string; notifications: NotificationMessage[]; unreadCount: number }>();
+    const systemNotifications: NotificationMessage[] = [];
+
+    filteredNotifications.forEach((n) => {
+      if (n.type === "subscription_update" && n.authorId && n.authorName) {
+        const existing = map.get(n.authorId);
+        if (existing) {
+          existing.notifications.push(n);
+          if (!n.read) existing.unreadCount++;
+        } else {
+          map.set(n.authorId, {
+            authorId: n.authorId,
+            authorName: n.authorName,
+            authorAvatar: n.authorAvatar,
+            notifications: [n],
+            unreadCount: n.read ? 0 : 1,
+          });
+        }
+      } else {
+        systemNotifications.push(n);
+      }
+    });
+
+    return {
+      systemNotifications,
+      authorGroups: Array.from(map.values()).sort((a, b) => b.unreadCount - a.unreadCount),
+    };
+  }, [filteredNotifications]);
+
   const handleMainClick = (notification: NotificationMessage) => {
     if (!notification.read) {
       markNotificationRead(notification.id);
@@ -966,9 +1058,39 @@ function NotificationsSection({
     }
   };
 
+  const handleViewAuthorWorksById = (e: React.MouseEvent, authorId: string) => {
+    e.stopPropagation();
+    navigate(`/search?author=${authorId}`);
+  };
+
+  const handleMarkAuthorRead = (authorId: string, authorName: string) => {
+    const authorGroup = authorGroups.authorGroups.find((g) => g.authorId === authorId);
+    if (authorGroup) {
+      authorGroup.notifications.forEach((n) => {
+        if (!n.read) {
+          markNotificationRead(n.id);
+        }
+      });
+    }
+    showToast({ type: "success", message: `已将 ${authorName} 的消息全部标记为已读` });
+  };
+
+  const handleMarkSystemRead = () => {
+    authorGroups.systemNotifications.forEach((n) => {
+      if (!n.read) {
+        markNotificationRead(n.id);
+      }
+    });
+    showToast({ type: "success", message: "已将系统通知全部标记为已读" });
+  };
+
   const handleMarkAllRead = () => {
     markAllNotificationsRead();
     showToast({ type: "success", message: "已将所有通知标记为已读" });
+  };
+
+  const toggleAuthorExpand = (authorId: string) => {
+    setExpandedAuthorId((prev) => (prev === authorId ? null : authorId));
   };
 
   const toggle = (key: keyof typeof notificationSettings) => {
@@ -1006,6 +1128,197 @@ function NotificationsSection({
   ];
 
   const selectedAuthorName = authorOptions.find((a) => a.id === activeAuthorFilter)?.name;
+  const systemUnreadCount = authorGroups.systemNotifications.filter((n) => !n.read).length;
+
+  const renderNotificationRow = (notification: NotificationMessage) => (
+    <div
+      key={notification.id}
+      className={`w-full flex items-start gap-3 p-4 rounded-xl border transition-all ${
+        notification.read
+          ? "bg-surface border-border hover:border-primary/20"
+          : "bg-primary/5 border-primary/20 hover:border-primary/40"
+      }`}
+    >
+      <button
+        onClick={() => handleMainClick(notification)}
+        className="flex-1 min-w-0 flex items-start gap-3 text-left"
+      >
+        <div className="shrink-0 mt-0.5">
+          {notification.authorAvatar ? (
+            <img
+              src={notification.authorAvatar}
+              alt={notification.authorName}
+              className="w-10 h-10 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-surface-light flex items-center justify-center">
+              {notification.type === "system" ? (
+                <Bell className="w-5 h-5 text-gray-400" />
+              ) : notification.type === "weekly_digest" ? (
+                <Sparkles className="w-5 h-5 text-gray-400" />
+              ) : (
+                <Bell className="w-5 h-5 text-gray-400" />
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className={`text-sm font-medium truncate ${notification.read ? "text-gray-300" : "text-gray-100"}`}>
+              {notification.title}
+            </p>
+            {!notification.read && (
+              <Circle className="w-2.5 h-2.5 fill-primary text-primary shrink-0" />
+            )}
+          </div>
+          <p className="text-sm text-gray-400 mt-0.5 line-clamp-2">{notification.description}</p>
+          <p className="text-xs text-gray-500 mt-1.5">{formatDate(notification.createdAt)}</p>
+        </div>
+        {notification.type === "subscription_update" && notification.wallpaperThumbnail && (
+          <img
+            src={notification.wallpaperThumbnail}
+            alt=""
+            className="w-14 h-10 rounded-lg object-cover shrink-0"
+          />
+        )}
+      </button>
+
+      {notification.authorId && (
+        <div className="shrink-0 flex flex-col gap-2 ml-2">
+          <button
+            onClick={(e) => handleViewAuthorWorks(e, notification)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-hover border border-border text-gray-300 hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+            title="查看该作者作品"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">作者作品</span>
+          </button>
+          {notification.wallpaperId && (
+            <div className="text-[10px] text-gray-500 text-center leading-tight px-1">
+              点击左侧<br/>查看壁纸
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderSystemGroup = () => {
+    if (authorGroups.systemNotifications.length === 0) return null;
+    const isExpanded = expandedAuthorId === "__system__";
+    return (
+      <div key="__system__" className="space-y-2">
+        <div
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+            isExpanded
+              ? "bg-surface border-primary/30"
+              : "bg-surface border-border hover:border-primary/20"
+          }`}
+          onClick={() => toggleAuthorExpand("__system__")}
+        >
+          <div className="w-10 h-10 rounded-full bg-surface-light flex items-center justify-center shrink-0">
+            <Bell className="w-5 h-5 text-gray-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-100 truncate">系统通知</p>
+              {systemUnreadCount > 0 && (
+                <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-white text-xs font-medium flex items-center justify-center">
+                  {systemUnreadCount}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">{authorGroups.systemNotifications.length} 条消息</p>
+          </div>
+          <div className="shrink-0 flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMarkSystemRead();
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-hover border border-border text-gray-300 hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+              title="全部标为已读"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">全部标为已读</span>
+            </button>
+            <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+          </div>
+        </div>
+        {isExpanded && (
+          <div className="pl-4 space-y-2">
+            {authorGroups.systemNotifications.map((n) => renderNotificationRow(n))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAuthorGroup = (group: typeof authorGroups.authorGroups[0]) => {
+    const isExpanded = expandedAuthorId === group.authorId;
+    return (
+      <div key={group.authorId} className="space-y-2">
+        <div
+          className={`w-full flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+            isExpanded
+              ? "bg-surface border-primary/30"
+              : "bg-surface border-border hover:border-primary/20"
+          }`}
+          onClick={() => toggleAuthorExpand(group.authorId)}
+        >
+          {group.authorAvatar ? (
+            <img
+              src={group.authorAvatar}
+              alt={group.authorName}
+              className="w-10 h-10 rounded-full object-cover shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-surface-light flex items-center justify-center shrink-0">
+              <Users className="w-5 h-5 text-gray-400" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium text-gray-100 truncate">{group.authorName}</p>
+              {group.unreadCount > 0 && (
+                <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-white text-xs font-medium flex items-center justify-center">
+                  {group.unreadCount}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">{group.notifications.length} 条消息</p>
+          </div>
+          <div className="shrink-0 flex items-center gap-2">
+            <button
+              onClick={(e) => handleViewAuthorWorksById(e, group.authorId)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-hover border border-border text-gray-300 hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+              title="查看作者作品"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">查看作者作品</span>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMarkAuthorRead(group.authorId, group.authorName);
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-hover border border-border text-gray-300 hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+              title="全部标为已读"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">全部标为已读</span>
+            </button>
+            <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+          </div>
+        </div>
+        {isExpanded && (
+          <div className="pl-4 space-y-2">
+            {group.notifications.map((n) => renderNotificationRow(n))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -1061,6 +1374,31 @@ function NotificationsSection({
                 </button>
               );
             })}
+          </div>
+
+          <div className="flex gap-1 p-1 bg-surface rounded-xl w-fit">
+            <button
+              onClick={() => setViewMode("timeline")}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                viewMode === "timeline"
+                  ? "bg-primary text-background"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              时间流
+            </button>
+            <button
+              onClick={() => setViewMode("by_author")}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                viewMode === "by_author"
+                  ? "bg-primary text-background"
+                  : "text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              按作者分组
+            </button>
           </div>
 
           {authorOptions.length > 0 && (
@@ -1164,79 +1502,13 @@ function NotificationsSection({
                 探索壁纸
               </button>
             </div>
+          ) : viewMode === "timeline" ? (
+            filteredNotifications.map((notification) => renderNotificationRow(notification))
           ) : (
-            filteredNotifications.map((notification) => (
-              <div
-                key={notification.id}
-                className={`w-full flex items-start gap-3 p-4 rounded-xl border transition-all ${
-                  notification.read
-                    ? "bg-surface border-border hover:border-primary/20"
-                    : "bg-primary/5 border-primary/20 hover:border-primary/40"
-                }`}
-              >
-                <button
-                  onClick={() => handleMainClick(notification)}
-                  className="flex-1 min-w-0 flex items-start gap-3 text-left"
-                >
-                  <div className="shrink-0 mt-0.5">
-                    {notification.authorAvatar ? (
-                      <img
-                        src={notification.authorAvatar}
-                        alt={notification.authorName}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-surface-light flex items-center justify-center">
-                        {notification.type === "system" ? (
-                          <Bell className="w-5 h-5 text-gray-400" />
-                        ) : notification.type === "weekly_digest" ? (
-                          <Sparkles className="w-5 h-5 text-gray-400" />
-                        ) : (
-                          <Bell className="w-5 h-5 text-gray-400" />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className={`text-sm font-medium truncate ${notification.read ? "text-gray-300" : "text-gray-100"}`}>
-                        {notification.title}
-                      </p>
-                      {!notification.read && (
-                        <Circle className="w-2.5 h-2.5 fill-primary text-primary shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-400 mt-0.5 line-clamp-2">{notification.description}</p>
-                    <p className="text-xs text-gray-500 mt-1.5">{formatDate(notification.createdAt)}</p>
-                  </div>
-                  {notification.type === "subscription_update" && notification.wallpaperThumbnail && (
-                    <img
-                      src={notification.wallpaperThumbnail}
-                      alt=""
-                      className="w-14 h-10 rounded-lg object-cover shrink-0"
-                    />
-                  )}
-                </button>
-
-                {notification.authorId && (
-                  <div className="shrink-0 flex flex-col gap-2 ml-2">
-                    <button
-                      onClick={(e) => handleViewAuthorWorks(e, notification)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-hover border border-border text-gray-300 hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
-                      title="查看该作者作品"
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">作者作品</span>
-                    </button>
-                    {notification.wallpaperId && (
-                      <div className="text-[10px] text-gray-500 text-center leading-tight px-1">
-                        点击左侧<br/>查看壁纸
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))
+            <div className="space-y-3">
+              {renderSystemGroup()}
+              {authorGroups.authorGroups.map((group) => renderAuthorGroup(group))}
+            </div>
           )}
         </div>
       </section>

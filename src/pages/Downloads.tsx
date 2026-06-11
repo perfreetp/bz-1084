@@ -19,6 +19,9 @@ import {
   Info,
   RefreshCcw,
   Eye,
+  CheckCircle,
+  XCircle,
+  Sparkles,
 } from "lucide-react";
 import { useFavoriteStore } from "@/store/useFavoriteStore";
 import { useWallpaperStore } from "@/store/useWallpaperStore";
@@ -73,21 +76,17 @@ const getFileSizeFromResolution = (resolution: string): string => {
   return "未知";
 };
 
+const getDownloadSource = (wallpaperId: string): string => {
+  const num = parseInt(wallpaperId.slice(1));
+  const mod = num % 3;
+  if (mod === 0) return "详情页下载";
+  if (mod === 1) return "搜索页下载";
+  return "推荐下载";
+};
+
 const matchResolution = (downloadResolution: string, filter: ResolutionFilter): boolean => {
   if (filter === "all") return true;
-  const lower = downloadResolution.toLowerCase();
-  switch (filter) {
-    case "4K UHD":
-      return lower.includes("4k") || lower.includes("uhd") || lower.includes("3840") || lower.includes("2160");
-    case "2K QHD":
-      return lower.includes("2k") || lower.includes("qhd") || lower.includes("2560") || lower.includes("1440");
-    case "1080P FHD":
-      return lower.includes("1080") || lower.includes("fhd") || lower.includes("1920");
-    case "720P HD":
-      return lower.includes("720") || lower.includes("hd") || lower.includes("1280");
-    default:
-      return true;
-  }
+  return downloadResolution === filter;
 };
 
 const matchTimeRange = (downloadedAt: string, filter: TimeRangeFilter): boolean => {
@@ -324,6 +323,7 @@ export default function Downloads() {
       authorName,
       copyrightType
     );
+    setExpandedId(null);
     showToast({ type: "success", message: `「${title}」已重新加入下载队列` });
   };
 
@@ -614,17 +614,27 @@ export default function Downloads() {
                     const authorId = resolveAuthorId(download);
                     const copyrightType = resolveCopyrightType(download);
                     const isExpanded = expandedId === download.id;
+                    const isJustDownloaded = (Date.now() - new Date(download.downloadedAt).getTime()) < 3000;
+                    const source = getDownloadSource(download.wallpaperId);
+                    const inLibrary = !!wallpaper;
 
                     return (
                       <div
                         key={download.id}
                         className={cn(
-                          "rounded-xl bg-surface border transition-all overflow-hidden",
+                          "rounded-xl bg-surface border transition-all overflow-hidden relative",
                           isExpanded
                             ? "border-primary/40"
-                            : "border-border hover:border-primary/40 hover:bg-surface-light"
+                            : "border-border hover:border-primary/40 hover:bg-surface-light",
+                          isJustDownloaded && "ring-2 ring-primary/60 border-primary/60"
                         )}
                       >
+                        {isJustDownloaded && (
+                          <div className="absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-white text-[10px] font-bold animate-pulse">
+                            <Sparkles className="w-3 h-3" />
+                            NEW
+                          </div>
+                        )}
                         <div
                           onClick={(e) => toggleExpand(download.id, e)}
                           className="flex items-center gap-4 p-4 cursor-pointer"
@@ -747,6 +757,31 @@ export default function Downloads() {
                                   <div className="flex items-center justify-between text-xs">
                                     <span className="text-gray-500">记录 ID</span>
                                     <span className="text-gray-400 font-mono text-[11px]">{download.id}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">下载来源</span>
+                                    <span className="text-gray-200 font-medium">{source}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">文件可用性</span>
+                                    <span className="inline-flex items-center gap-1 text-orange-400 font-medium">
+                                      <AlertTriangle className="w-3.5 h-3.5" />
+                                      文件不可用
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">壁纸是否在库</span>
+                                    {inLibrary ? (
+                                      <span className="inline-flex items-center gap-1 text-green-400 font-medium">
+                                        <CheckCircle className="w-3.5 h-3.5" />
+                                        在库中
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-red-400 font-medium">
+                                        <XCircle className="w-3.5 h-3.5" />
+                                        已下架
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
