@@ -28,7 +28,9 @@ const navItems = [
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUISTore();
   const { user } = useUserStore();
-  const { favorites, downloads } = useFavoriteStore();
+  const { favorites, downloads, notifications } = useFavoriteStore();
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <aside
@@ -102,6 +104,11 @@ export function Sidebar() {
                     {item.path === "/downloads" && downloads.length > 0 && (
                       <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full">
                         {downloads.length}
+                      </span>
+                    )}
+                    {item.path === "/settings" && unreadCount > 0 && (
+                      <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
+                        {unreadCount}
                       </span>
                     )}
                   </>

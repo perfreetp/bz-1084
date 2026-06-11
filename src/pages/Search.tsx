@@ -17,6 +17,7 @@ import { WallpaperGrid } from "@/components/wallpaper/WallpaperGrid";
 import { useWallpaperStore } from "@/store/useWallpaperStore";
 import { hotTags, allTags } from "@/data/tags";
 import { categories } from "@/data/categories";
+import { authors } from "@/data/authors";
 import { getStorage, setStorage } from "@/utils/storage";
 import { Empty } from "@/components/common/Empty";
 import type { AspectRatio, FilterOptions } from "@/types";
@@ -54,6 +55,7 @@ export default function SearchPage() {
   const queryFromUrl = searchParams.get("q") || "";
   const tagsFromUrl = searchParams.getAll("tag");
   const categoryFromUrl = searchParams.get("category") || "";
+  const authorFromUrl = searchParams.get("author") || "";
   const ratiosFromUrl = searchParams.getAll("ratio") as AspectRatio[];
   const resolutionsFromUrl = searchParams.getAll("res");
   const colorsFromUrl = searchParams.getAll("color");
@@ -67,6 +69,7 @@ export default function SearchPage() {
   const query = queryFromUrl;
   const tags = tagsFromUrl;
   const categoryId = categoryFromUrl;
+  const authorId = authorFromUrl;
   const aspectRatios = ratiosFromUrl;
   const resolutions = resolutionsFromUrl;
   const colors = colorsFromUrl;
@@ -174,12 +177,14 @@ export default function SearchPage() {
       tags,
       colors,
       categoryId: categoryId || undefined,
+      authorId: authorId || undefined,
     });
-  }, [query, sort, aspectRatios, resolutions, tags, colors, categoryId, filterWallpapers]);
+  }, [query, sort, aspectRatios, resolutions, tags, colors, categoryId, authorId, filterWallpapers]);
 
   const hasActiveFilters =
     query ||
     categoryId ||
+    authorId ||
     aspectRatios.length > 0 ||
     resolutions.length > 0 ||
     tags.length > 0 ||
@@ -187,6 +192,7 @@ export default function SearchPage() {
 
   const currentSortLabel = sortOptions.find((o) => o.value === sort)?.label || "最受欢迎";
   const categoryName = categoryId ? categories.find((c) => c.id === categoryId)?.name : "";
+  const authorName = authorId ? authors.find((a) => a.id === authorId)?.name : "";
   const colorNameMap: Record<string, string> = {
     "#ef4444": "红色", "#f97316": "橙色", "#f59e0b": "黄色", "#22c55e": "绿色",
     "#14b8a6": "青色", "#3b82f6": "蓝色", "#8b5cf6": "紫色", "#ec4899": "粉色",
@@ -342,6 +348,17 @@ export default function SearchPage() {
                 分类: {categoryName}
                 <button
                   onClick={() => updateFilters({ category: null })}
+                  className="hover:text-primary-light"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {authorId && authorName && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                作者: {authorName}
+                <button
+                  onClick={() => updateFilters({ author: null })}
                   className="hover:text-primary-light"
                 >
                   <X className="w-3 h-3" />

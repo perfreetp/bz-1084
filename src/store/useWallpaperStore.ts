@@ -69,6 +69,10 @@ export const useWallpaperStore = create<WallpaperState>((set, get) => ({
       result = result.filter((w) => w.categoryId === options.categoryId);
     }
 
+    if (options.authorId) {
+      result = result.filter((w) => w.authorId === options.authorId);
+    }
+
     if (options.aspectRatios && options.aspectRatios.length > 0) {
       result = result.filter((w) => (options.aspectRatios as AspectRatio[]).includes(w.aspectRatio));
     }
@@ -79,6 +83,12 @@ export const useWallpaperStore = create<WallpaperState>((set, get) => ({
 
     if (options.colors && options.colors.length > 0) {
       result = result.filter((w) => w.colors.some((c) => options.colors!.includes(c)));
+    }
+
+    if (options.resolutions && options.resolutions.length > 0) {
+      result = result.filter((w) =>
+        w.resolutions.some((r) => options.resolutions!.includes(r.name))
+      );
     }
 
     if (options.sort) {

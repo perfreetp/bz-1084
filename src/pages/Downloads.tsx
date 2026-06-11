@@ -12,18 +12,24 @@ import {
   X,
   AlertTriangle,
   Search,
-  Hash,
   Droplets,
+  User,
+  Shield,
+  ChevronDown,
 } from "lucide-react";
 import { useFavoriteStore } from "@/store/useFavoriteStore";
 import { useWallpaperStore } from "@/store/useWallpaperStore";
 import { useToast } from "@/hooks/useToast";
+import { allAuthors } from "@/data/authors";
 import { Empty } from "@/components/common/Empty";
 import { formatFullDate, formatNumber } from "@/utils/format";
 import { cn } from "@/lib/utils";
+import type { CopyrightType } from "@/types";
 
 type ClearRange = "week" | "month" | "all";
 type ResolutionFilter = "all" | "4K UHD" | "2K QHD" | "1080P FHD" | "720P HD";
+type TimeRangeFilter = "all" | "today" | "week" | "month" | "older";
+type WatermarkFilter = "all" | "with" | "without";
 
 const resolutionOptions: { key: ResolutionFilter; label: string }[] = [
   { key: "all", label: "全部" },
@@ -31,6 +37,20 @@ const resolutionOptions: { key: ResolutionFilter; label: string }[] = [
   { key: "2K QHD", label: "2K QHD" },
   { key: "1080P FHD", label: "1080P FHD" },
   { key: "720P HD", label: "720P HD" },
+];
+
+const timeRangeOptions: { key: TimeRangeFilter; label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "today", label: "今天" },
+  { key: "week", label: "本周" },
+  { key: "month", label: "本月" },
+  { key: "older", label: "更早" },
+];
+
+const watermarkOptions: { key: WatermarkFilter; label: string }[] = [
+  { key: "all", label: "全部" },
+  { key: "with", label: "含水印" },
+  { key: "without", label: "无水印" },
 ];
 
 const matchResolution = (downloadResolution: string, filter: ResolutionFilter): boolean => {
@@ -50,6 +70,37 @@ const matchResolution = (downloadResolution: string, filter: ResolutionFilter): 
   }
 };
 
+const matchTimeRange = (downloadedAt: string, filter: TimeRangeFilter): boolean => {
+  if (filter === "all") return true;
+  const now = new Date();
+  const dlTime = new Date(downloadedAt).getTime();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  switch (filter) {
+    case "today":
+      return dlTime >= startOfToday;
+    case "week":
+      return dlTime >= now.getTime() - 7 * 24 * 60 * 60 * 1000;
+    case "month":
+      return dlTime >= now.getTime() - 30 * 24 * 60 * 60 * 1000;
+    case "older":
+      return dlTime < now.getTime() - 30 * 24 * 60 * 60 * 1000;
+    default:
+      return true;
+  }
+};
+
+const matchWatermark = (watermark: boolean | undefined, filter: WatermarkFilter): boolean => {
+  if (filter === "all") return true;
+  if (filter === "with") return watermark === true;
+  return watermark === false || watermark === undefined;
+};
+
+const copyrightBadgeConfig: Record<CopyrightType, { label: string; bg: string; text: string }> = {
+  free: { label: "免费", bg: "bg-emerald-500/10", text: "text-emerald-400" },
+  cc: { label: "CC 协议", bg: "bg-blue-500/10", text: "text-blue-400" },
+  commercial: { label: "商用", bg: "bg-amber-500/10", text: "text-amber-400" },
+};
+
 export default function Downloads() {
   const { downloads, favorites, clearDownloads } = useFavoriteStore();
   const { getWallpaperById } = useWallpaperStore();
@@ -57,9 +108,39 @@ export default function Downloads() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [resolutionFilter, setResolutionFilter] = useState<ResolutionFilter>("all");
+  const [timeRangeFilter, setTimeRangeFilter] = useState<TimeRangeFilter>("all");
+  const [watermarkFilter, setWatermarkFilter] = useState<WatermarkFilter>("all");
+  const [authorFilter, setAuthorFilter] = useState<string>("all");
+  const [showAuthorDropdown, setShowAuthorDropdown] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearRange, setClearRange] = useState<ClearRange>("week");
   const [imgLoaded, setImgLoaded] = useState<Record<string, boolean>>({});
+
+  const uniqueAuthors = useMemo(() => {
+    const map = new Map<string, string>();
+    downloads.forEach((d) => {
+      const aid = d.authorId || getWallpaperById(d.wallpaperId)?.authorId;
+      let aname = d.authorName;
+      if (!aname && aid) {
+        const found = allAuthors.find((a) => a.id === aid);
+        if (found) aname = found.name;
+      }
+      if (!aname && !aid) {
+        const wp = getWallpaperById(d.wallpaperId);
+        if (wp) {
+          const found = allAuthors.find((a) => a.id === wp.authorId);
+          if (found) {
+            map.set(wp.authorId, found.name);
+            return;
+          }
+        }
+      }
+      if (aid && aname) {
+        map.set(aid, aname);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [downloads, getWallpaperById]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -80,14 +161,23 @@ export default function Downloads() {
   const filteredDownloads = useMemo(() => {
     return downloads.filter((download) => {
       const wallpaper = getWallpaperById(download.wallpaperId);
-      const title = wallpaper?.title || "";
-      const matchesSearch = searchQuery.trim() === "" 
-        ? true 
+      const title = download.wallpaperTitle || wallpaper?.title || "";
+      const matchesSearch = searchQuery.trim() === ""
+        ? true
         : title.toLowerCase().includes(searchQuery.trim().toLowerCase());
       const matchesResolution = matchResolution(download.resolution, resolutionFilter);
-      return matchesSearch && matchesResolution;
+      const matchesTime = matchTimeRange(download.downloadedAt, timeRangeFilter);
+      const matchesWatermark = matchWatermark(download.watermark, watermarkFilter);
+
+      let matchesAuthor = true;
+      if (authorFilter !== "all") {
+        const aid = download.authorId || wallpaper?.authorId;
+        matchesAuthor = aid === authorFilter;
+      }
+
+      return matchesSearch && matchesResolution && matchesTime && matchesWatermark && matchesAuthor;
     });
-  }, [downloads, searchQuery, resolutionFilter, getWallpaperById]);
+  }, [downloads, searchQuery, resolutionFilter, timeRangeFilter, watermarkFilter, authorFilter, getWallpaperById]);
 
   const groupedDownloads = useMemo(() => {
     const groups: Record<string, typeof filteredDownloads> = {};
@@ -147,6 +237,34 @@ export default function Downloads() {
     setShowClearModal(false);
   };
 
+  const resolveTitle = (download: (typeof downloads)[0]) => {
+    if (download.wallpaperTitle) return download.wallpaperTitle;
+    const wp = getWallpaperById(download.wallpaperId);
+    return wp?.title || "未知壁纸";
+  };
+
+  const resolveThumbnail = (download: (typeof downloads)[0]) => {
+    if (download.wallpaperThumbnail) return download.wallpaperThumbnail;
+    const wp = getWallpaperById(download.wallpaperId);
+    return wp?.thumbnailUrl || "";
+  };
+
+  const resolveAuthorName = (download: (typeof downloads)[0]) => {
+    if (download.authorName) return download.authorName;
+    const wp = getWallpaperById(download.wallpaperId);
+    if (wp) {
+      const author = allAuthors.find((a) => a.id === wp.authorId);
+      if (author) return author.name;
+    }
+    return "";
+  };
+
+  const resolveCopyrightType = (download: (typeof downloads)[0]): CopyrightType | undefined => {
+    if (download.copyrightType) return download.copyrightType;
+    const wp = getWallpaperById(download.wallpaperId);
+    return wp?.copyright?.type;
+  };
+
   const statCards = [
     {
       label: "总下载数",
@@ -171,7 +289,24 @@ export default function Downloads() {
     },
   ];
 
-  const hasActiveFilters = searchQuery.trim() !== "" || resolutionFilter !== "all";
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    resolutionFilter !== "all" ||
+    timeRangeFilter !== "all" ||
+    watermarkFilter !== "all" ||
+    authorFilter !== "all";
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setResolutionFilter("all");
+    setTimeRangeFilter("all");
+    setWatermarkFilter("all");
+    setAuthorFilter("all");
+  };
+
+  const selectedAuthorLabel = authorFilter === "all"
+    ? "全部作者"
+    : uniqueAuthors.find((a) => a.id === authorFilter)?.name || "未知作者";
 
   return (
     <div className="min-h-screen">
@@ -190,7 +325,7 @@ export default function Downloads() {
               onClick={() => setShowClearModal(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface border border-border text-gray-200 hover:bg-surface-light hover:border-red-500/30 hover:text-red-400 transition-colors"
             >
-              <Filter className="w-4 h-4" />
+              <Trash2 className="w-4 h-4" />
               <span className="text-sm">清理历史</span>
             </button>
           )}
@@ -234,16 +369,95 @@ export default function Downloads() {
           </div>
         </div>
 
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 mt-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500 shrink-0">时间</span>
+            {timeRangeOptions.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setTimeRangeFilter(opt.key)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+                  timeRangeFilter === opt.key
+                    ? "bg-primary/15 border border-primary/40 text-primary"
+                    : "bg-surface border border-border text-gray-400 hover:bg-surface-light hover:border-primary/30 hover:text-gray-200"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500 shrink-0">水印</span>
+            {watermarkOptions.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setWatermarkFilter(opt.key)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+                  watermarkFilter === opt.key
+                    ? "bg-primary/15 border border-primary/40 text-primary"
+                    : "bg-surface border border-border text-gray-400 hover:bg-surface-light hover:border-primary/30 hover:text-gray-200"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowAuthorDropdown(!showAuthorDropdown)}
+              className={cn(
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+                authorFilter !== "all"
+                  ? "bg-primary/15 border border-primary/40 text-primary"
+                  : "bg-surface border border-border text-gray-400 hover:bg-surface-light hover:border-primary/30 hover:text-gray-200"
+              )}
+            >
+              <User className="w-3.5 h-3.5" />
+              {selectedAuthorLabel}
+              <ChevronDown className={cn("w-3 h-3 transition-transform", showAuthorDropdown && "rotate-180")} />
+            </button>
+            {showAuthorDropdown && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowAuthorDropdown(false)} />
+                <div className="absolute top-full left-0 mt-1.5 w-44 py-1.5 bg-surface border border-border rounded-xl shadow-xl z-20 animate-slide-up">
+                  <button
+                    onClick={() => { setAuthorFilter("all"); setShowAuthorDropdown(false); }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 text-xs hover:bg-surface-light transition-colors",
+                      authorFilter === "all" ? "text-primary" : "text-gray-300"
+                    )}
+                  >
+                    全部作者
+                  </button>
+                  {uniqueAuthors.map((author) => (
+                    <button
+                      key={author.id}
+                      onClick={() => { setAuthorFilter(author.id); setShowAuthorDropdown(false); }}
+                      className={cn(
+                        "w-full text-left px-3 py-2 text-xs hover:bg-surface-light transition-colors",
+                        authorFilter === author.id ? "text-primary" : "text-gray-300"
+                      )}
+                    >
+                      {author.name}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
             <span className="text-xs text-gray-400">当前筛选：</span>
             {searchQuery.trim() !== "" && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full">
                 关键词: "{searchQuery.trim()}"
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="hover:text-primary-light"
-                >
+                <button onClick={() => setSearchQuery("")} className="hover:text-primary-light">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -251,23 +465,41 @@ export default function Downloads() {
             {resolutionFilter !== "all" && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full">
                 分辨率: {resolutionFilter}
-                <button
-                  onClick={() => setResolutionFilter("all")}
-                  className="hover:text-primary-light"
-                >
+                <button onClick={() => setResolutionFilter("all")} className="hover:text-primary-light">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {timeRangeFilter !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                时间: {timeRangeOptions.find((o) => o.key === timeRangeFilter)?.label}
+                <button onClick={() => setTimeRangeFilter("all")} className="hover:text-primary-light">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {watermarkFilter !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                水印: {watermarkOptions.find((o) => o.key === watermarkFilter)?.label}
+                <button onClick={() => setWatermarkFilter("all")} className="hover:text-primary-light">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {authorFilter !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                作者: {selectedAuthorLabel}
+                <button onClick={() => setAuthorFilter("all")} className="hover:text-primary-light">
                   <X className="w-3 h-3" />
                 </button>
               </span>
             )}
             <button
-              onClick={() => {
-                setSearchQuery("");
-                setResolutionFilter("all");
-              }}
+              onClick={clearAllFilters}
               className="ml-auto inline-flex items-center gap-1 text-xs text-gray-400 hover:text-primary transition-colors"
             >
               <Filter className="w-3 h-3" />
-              清除筛选
+              清除全部
             </button>
           </div>
         )}
@@ -309,38 +541,43 @@ export default function Downloads() {
                 <div className="space-y-2">
                   {dayDownloads.map((download) => {
                     const wallpaper = getWallpaperById(download.wallpaperId);
-                    if (!wallpaper) return null;
-
-                    const shortId = download.id.length > 8 
-                      ? download.id.slice(0, 4) + "..." + download.id.slice(-4)
-                      : download.id;
+                    const thumbnail = resolveThumbnail(download);
+                    const title = resolveTitle(download);
+                    const authorName = resolveAuthorName(download);
+                    const copyrightType = resolveCopyrightType(download);
 
                     return (
                       <Link
                         key={download.id}
-                        to={`/wallpaper/${wallpaper.id}`}
+                        to={wallpaper ? `/wallpaper/${wallpaper.id}` : "#"}
                         className="group flex items-center gap-4 p-4 rounded-xl bg-surface border border-border hover:border-primary/40 hover:bg-surface-light transition-all"
                       >
-                        <div className="relative w-24 h-14 rounded-lg overflow-hidden bg-background-light shrink-0">
-                          {!imgLoaded[download.id] && (
+                        <div className="relative w-28 h-16 rounded-lg overflow-hidden bg-background-light shrink-0">
+                          {thumbnail && !imgLoaded[download.id] && (
                             <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-surface to-surface-light" />
                           )}
-                          <img
-                            src={wallpaper.thumbnailUrl}
-                            alt={wallpaper.title}
-                            className={cn(
-                              "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
-                              imgLoaded[download.id] ? "opacity-100" : "opacity-0"
-                            )}
-                            onLoad={() =>
-                              setImgLoaded((prev) => ({ ...prev, [download.id]: true }))
-                            }
-                          />
+                          {thumbnail ? (
+                            <img
+                              src={thumbnail}
+                              alt={title}
+                              className={cn(
+                                "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
+                                imgLoaded[download.id] ? "opacity-100" : "opacity-0"
+                              )}
+                              onLoad={() =>
+                                setImgLoaded((prev) => ({ ...prev, [download.id]: true }))
+                              }
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-600">
+                              <Monitor className="w-6 h-6" />
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <h3 className="text-sm font-medium text-gray-100 truncate group-hover:text-primary transition-colors">
-                            {wallpaper.title}
+                            {title}
                           </h3>
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-1.5">
                             <span className="flex items-center gap-1 text-xs text-gray-500">
@@ -351,19 +588,21 @@ export default function Downloads() {
                               <Clock className="w-3 h-3" />
                               {formatFullDate(download.downloadedAt)}
                             </span>
-                            <span className="flex items-center gap-1 text-xs text-gray-500">
-                              <Hash className="w-3 h-3" />
-                              {shortId}
-                            </span>
+                            {authorName && (
+                              <span className="flex items-center gap-1 text-xs text-gray-500">
+                                <User className="w-3 h-3" />
+                                {authorName}
+                              </span>
+                            )}
                           </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-2 shrink-0">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
                             {download.watermark !== undefined && (
                               <div
                                 className={cn(
-                                  "flex items-center gap-1 px-2.5 py-1 rounded-full text-xs",
+                                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
                                   download.watermark
                                     ? "bg-amber-500/10 text-amber-400"
                                     : "bg-emerald-500/10 text-emerald-400"
@@ -373,7 +612,19 @@ export default function Downloads() {
                                 {download.watermark ? "含水印" : "无水印"}
                               </div>
                             )}
-                            <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-500/10 text-green-400 text-xs">
+                            {copyrightType && (
+                              <div
+                                className={cn(
+                                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
+                                  copyrightBadgeConfig[copyrightType].bg,
+                                  copyrightBadgeConfig[copyrightType].text
+                                )}
+                              >
+                                <Shield className="w-3 h-3" />
+                                {copyrightBadgeConfig[copyrightType].label}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-xs">
                               <Download className="w-3 h-3" />
                               已下载
                             </div>

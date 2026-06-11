@@ -26,13 +26,17 @@ import {
   Eye,
   Users,
   BellRing,
+  CheckCheck,
+  Circle,
+  Inbox,
 } from "lucide-react";
 import { useUserStore } from "@/store/useUserStore";
 import { useFavoriteStore } from "@/store/useFavoriteStore";
 import { useToast } from "@/hooks/useToast";
 import { authors } from "@/data/authors";
 import { allTags } from "@/data/tags";
-import type { ScheduleInterval, ScheduleSourceType } from "@/types";
+import { formatDate } from "@/utils/format";
+import type { ScheduleInterval, ScheduleSourceType, NotificationMessage } from "@/types";
 
 type SettingsTab = "profile" | "schedule" | "subscription" | "tags" | "notifications";
 
@@ -48,7 +52,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { tab } = useParams<{ tab?: string }>();
   const { user, updateProfile, updateSchedule, updateNotifications } = useUserStore();
-  const { subscriptions, followedTags, subscribe, unsubscribe, followTag, unfollowTag, isSubscribed, isTagFollowed } = useFavoriteStore();
+  const { subscriptions, followedTags, subscribe, unsubscribe, followTag, unfollowTag, isSubscribed, isTagFollowed, notifications, markNotificationRead, markAllNotificationsRead, getUnreadCount } = useFavoriteStore();
   const { showToast } = useToast();
 
   const activeTab: SettingsTab = (tab as SettingsTab) || "profile";
@@ -119,9 +123,13 @@ export default function Settings() {
             )}
             {activeTab === "notifications" && (
               <NotificationsSection
-                notifications={user.settings.notifications}
+                notifications={notifications}
                 updateNotifications={updateNotifications}
                 showToast={showToast}
+                markNotificationRead={markNotificationRead}
+                markAllNotificationsRead={markAllNotificationsRead}
+                getUnreadCount={getUnreadCount}
+                notificationSettings={user.settings.notifications}
               />
             )}
           </main>
@@ -461,6 +469,7 @@ function SubscriptionSection({
   navigate: (to: string) => void;
   notificationsEnabled: boolean;
 }) {
+  const { notifications, addNotification } = useFavoriteStore();
   const [subTab, setSubTab] = useState<SubscriptionTab>("subscribed");
 
   const subscribedAuthors = useMemo(() => authors.filter((a) => isSubscribed(a.id)), [isSubscribed]);
@@ -469,17 +478,34 @@ function SubscriptionSection({
     [isSubscribed]
   );
 
-  const recentUpdates = useMemo(
-    () => [
-      { authorId: "a1", authorName: "星河漫步", avatarUrl: authors[0]?.avatarUrl, time: "2 小时前", content: "发布了新壁纸" },
-      { authorId: "a4", authorName: "城市猎人", avatarUrl: authors[3]?.avatarUrl, time: "5 小时前", content: "发布了新壁纸" },
-      { authorId: "a5", authorName: "梦幻画师", avatarUrl: authors[4]?.avatarUrl, time: "昨天", content: "发布了新壁纸" },
-    ],
-    []
-  );
+  const recentUpdates = useMemo(() => {
+    return notifications
+      .filter((n) => n.type === "subscription_update" && n.authorId)
+      .filter((n) => subscribedAuthors.some((a) => a.id === n.authorId))
+      .slice(0, 5)
+      .map((n) => ({
+        notificationId: n.id,
+        authorId: n.authorId!,
+        authorName: n.authorName || "未知作者",
+        authorAvatar: n.authorAvatar || authors.find((a) => a.id === n.authorId)?.avatarUrl,
+        time: formatDate(n.createdAt),
+        content: n.description,
+        wallpaperId: n.wallpaperId,
+        wallpaperThumbnail: n.wallpaperThumbnail,
+      }));
+  }, [notifications, subscribedAuthors]);
 
   const handleSubscribe = (authorId: string, authorName: string) => {
     subscribe(authorId);
+    const author = authors.find((a) => a.id === authorId);
+    addNotification({
+      type: "subscription_update",
+      authorId,
+      authorName,
+      authorAvatar: author?.avatarUrl,
+      title: `${authorName} 发布了新壁纸`,
+      description: `你已订阅 ${authorName}，后续新作品将在此展示`,
+    });
     showToast({ type: "success", message: `已订阅 ${authorName}` });
   };
 
@@ -488,8 +514,8 @@ function SubscriptionSection({
     showToast({ type: "info", message: `已取消订阅 ${authorName}` });
   };
 
-  const handleViewWorks = () => {
-    navigate("/search");
+  const handleViewWorks = (authorId: string) => {
+    navigate(`/search?author=${authorId}`);
   };
 
   return (
@@ -541,19 +567,33 @@ function SubscriptionSection({
                   <Clock className="w-5 h-5 text-primary" />
                   最近更新
                 </h3>
-                <div className="space-y-2">
-                  {recentUpdates
-                    .filter((u) => subscribedAuthors.some((a) => a.id === u.authorId))
-                    .map((update, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center gap-3 p-3 bg-surface-light/50 rounded-lg border border-border/50"
+                {recentUpdates.length > 0 ? (
+                  <div className="space-y-2">
+                    {recentUpdates.map((update) => (
+                      <button
+                        key={update.notificationId}
+                        onClick={() => {
+                          if (update.wallpaperId) {
+                            navigate(`/wallpaper/${update.wallpaperId}`);
+                          } else {
+                            navigate(`/search?author=${update.authorId}`);
+                          }
+                        }}
+                        className="w-full text-left flex items-center gap-3 p-3 bg-surface-light/50 rounded-lg border border-border/50 hover:border-primary/30 transition-colors"
                       >
-                        <img
-                          src={update.avatarUrl}
-                          alt={update.authorName}
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
+                        {update.wallpaperThumbnail ? (
+                          <img
+                            src={update.wallpaperThumbnail}
+                            alt={update.authorName}
+                            className="w-8 h-8 rounded object-cover"
+                          />
+                        ) : (
+                          <img
+                            src={update.authorAvatar}
+                            alt={update.authorName}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-100">
                             <span className="font-medium">{update.authorName}</span>
@@ -561,9 +601,15 @@ function SubscriptionSection({
                           </p>
                         </div>
                         <span className="text-xs text-gray-500 shrink-0">{update.time}</span>
-                      </div>
+                        <Eye className="w-4 h-4 text-gray-500 shrink-0" />
+                      </button>
                     ))}
-                </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 p-3 bg-surface-light/50 rounded-lg">
+                    暂无已订阅作者的更新动态
+                  </p>
+                )}
               </div>
             )}
 
@@ -601,7 +647,7 @@ function SubscriptionSection({
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
-                        onClick={handleViewWorks}
+                        onClick={() => handleViewWorks(author.id)}
                         className="btn-ghost text-primary hover:bg-primary/10"
                       >
                         <Eye className="w-4 h-4 mr-1" />
@@ -781,25 +827,77 @@ function TagsSection({
   );
 }
 
+type NotificationFilter = "all" | "unread" | "read" | "subscription_update";
+
 function NotificationsSection({
   notifications,
   updateNotifications,
   showToast,
+  markNotificationRead,
+  markAllNotificationsRead,
+  getUnreadCount,
+  notificationSettings,
 }: {
-  notifications: ReturnType<typeof useUserStore.getState>["user"]["settings"]["notifications"];
+  notifications: NotificationMessage[];
   updateNotifications: (notifications: Partial<ReturnType<typeof useUserStore.getState>["user"]["settings"]["notifications"]>) => void;
   showToast: ReturnType<typeof useToast>["showToast"];
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  getUnreadCount: () => number;
+  notificationSettings: ReturnType<typeof useUserStore.getState>["user"]["settings"]["notifications"];
 }) {
-  const [state, setState] = useState(notifications);
+  const navigate = useNavigate();
+  const [filter, setFilter] = useState<NotificationFilter>("all");
+  const [state, setState] = useState(notificationSettings);
 
-  const toggle = (key: keyof typeof notifications) => {
+  const unreadCount = useMemo(() => getUnreadCount(), [notifications, getUnreadCount]);
+
+  const filteredNotifications = useMemo(() => {
+    switch (filter) {
+      case "unread":
+        return notifications.filter((n) => !n.read);
+      case "read":
+        return notifications.filter((n) => n.read);
+      case "subscription_update":
+        return notifications.filter((n) => n.type === "subscription_update");
+      default:
+        return notifications;
+    }
+  }, [notifications, filter]);
+
+  const filterTabs: { key: NotificationFilter; label: string }[] = [
+    { key: "all", label: "全部" },
+    { key: "unread", label: "未读" },
+    { key: "read", label: "已读" },
+    { key: "subscription_update", label: "订阅更新" },
+  ];
+
+  const handleClickNotification = (notification: NotificationMessage) => {
+    if (!notification.read) {
+      markNotificationRead(notification.id);
+    }
+    if (notification.type === "subscription_update") {
+      if (notification.wallpaperId) {
+        navigate(`/wallpaper/${notification.wallpaperId}`);
+      } else if (notification.authorId) {
+        navigate(`/search?author=${notification.authorId}`);
+      }
+    }
+  };
+
+  const handleMarkAllRead = () => {
+    markAllNotificationsRead();
+    showToast({ type: "success", message: "已将所有通知标记为已读" });
+  };
+
+  const toggle = (key: keyof typeof notificationSettings) => {
     const newValue = !state[key];
     setState((prev) => ({ ...prev, [key]: newValue }));
     updateNotifications({ [key]: newValue });
     showToast({ type: "info", message: newValue ? "已开启通知" : "已关闭通知" });
   };
 
-  const items: { key: keyof typeof notifications; title: string; desc: string; icon: typeof Download }[] = [
+  const items: { key: keyof typeof notificationSettings; title: string; desc: string; icon: typeof Download }[] = [
     {
       key: "subscriptionUpdate",
       title: "订阅更新",
@@ -829,7 +927,135 @@ function NotificationsSection({
   return (
     <div className="space-y-6 animate-fade-in">
       <section className="glass rounded-2xl p-6">
-        <h2 className="section-title">消息提醒</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="section-title mb-0">消息中心</h2>
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="flex items-center gap-1.5 text-sm text-primary hover:text-primary-light transition-colors"
+            >
+              <CheckCheck className="w-4 h-4" />
+              全部已读
+            </button>
+          )}
+        </div>
+
+        {unreadCount > 0 && (
+          <div className="flex items-center gap-2 mb-5 px-3 py-2 bg-primary/5 border border-primary/20 rounded-xl">
+            <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+              <span className="text-xs font-bold text-primary">{unreadCount}</span>
+            </div>
+            <span className="text-sm text-gray-300">
+              你有 <span className="text-primary font-medium">{unreadCount}</span> 条未读消息
+            </span>
+          </div>
+        )}
+
+        <div className="flex gap-2 mb-5 p-1 bg-surface rounded-xl w-fit">
+          {filterTabs.map(({ key, label }) => {
+            const count =
+              key === "all"
+                ? notifications.length
+                : key === "unread"
+                ? notifications.filter((n) => !n.read).length
+                : key === "read"
+                ? notifications.filter((n) => n.read).length
+                : notifications.filter((n) => n.type === "subscription_update").length;
+            return (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                  filter === key
+                    ? "bg-primary text-background"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                {label}
+                {count > 0 && (
+                  <span
+                    className={`ml-1.5 text-xs ${
+                      filter === key ? "text-background/70" : "text-gray-500"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="space-y-2">
+          {filteredNotifications.length === 0 ? (
+            <div className="text-center py-16">
+              <Inbox className="w-16 h-16 mx-auto text-gray-600 mb-4" />
+              <p className="text-gray-400">暂无{filter === "unread" ? "未读" : filter === "read" ? "已读" : filter === "subscription_update" ? "订阅更新" : ""}通知</p>
+              <p className="text-gray-500 text-sm mt-1">去发现更多精彩壁纸和创作者吧</p>
+              <button
+                onClick={() => navigate("/search")}
+                className="mt-4 btn-primary text-sm py-2 px-4"
+              >
+                探索壁纸
+              </button>
+            </div>
+          ) : (
+            filteredNotifications.map((notification) => (
+              <button
+                key={notification.id}
+                onClick={() => handleClickNotification(notification)}
+                className={`w-full text-left flex items-start gap-3 p-4 rounded-xl border transition-all ${
+                  notification.read
+                    ? "bg-surface border-border hover:border-primary/20"
+                    : "bg-primary/5 border-primary/20 hover:border-primary/40"
+                }`}
+              >
+                <div className="shrink-0 mt-0.5">
+                  {notification.authorAvatar ? (
+                    <img
+                      src={notification.authorAvatar}
+                      alt={notification.authorName}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-surface-light flex items-center justify-center">
+                      {notification.type === "system" ? (
+                        <Bell className="w-5 h-5 text-gray-400" />
+                      ) : notification.type === "weekly_digest" ? (
+                        <Sparkles className="w-5 h-5 text-gray-400" />
+                      ) : (
+                        <Bell className="w-5 h-5 text-gray-400" />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className={`text-sm font-medium truncate ${notification.read ? "text-gray-300" : "text-gray-100"}`}>
+                      {notification.title}
+                    </p>
+                    {!notification.read && (
+                      <Circle className="w-2.5 h-2.5 fill-primary text-primary shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-400 mt-0.5 line-clamp-2">{notification.description}</p>
+                  <p className="text-xs text-gray-500 mt-1.5">{formatDate(notification.createdAt)}</p>
+                </div>
+                {notification.type === "subscription_update" && notification.wallpaperThumbnail && (
+                  <img
+                    src={notification.wallpaperThumbnail}
+                    alt=""
+                    className="w-14 h-10 rounded-lg object-cover shrink-0"
+                  />
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="glass rounded-2xl p-6">
+        <h2 className="section-title">通知设置</h2>
         <p className="text-gray-400 mb-6">管理你想接收的通知类型</p>
 
         <div className="space-y-3">

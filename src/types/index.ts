@@ -88,6 +88,9 @@ export interface Download {
   watermark?: boolean;
   wallpaperTitle?: string;
   wallpaperThumbnail?: string;
+  authorId?: string;
+  authorName?: string;
+  copyrightType?: CopyrightType;
 }
 
 export interface Subscription {
@@ -155,9 +158,27 @@ export interface Toast {
 export interface FilterOptions {
   query?: string;
   categoryId?: string;
+  authorId?: string;
   resolutions?: string[];
   aspectRatios?: AspectRatio[];
   colors?: string[];
   tags?: string[];
   sort?: "popular" | "newest" | "downloads" | "views";
+}
+
+export type NotificationType = "subscription_update" | "favorite_update" | "system" | "weekly_digest";
+
+export interface NotificationMessage {
+  id: string;
+  type: NotificationType;
+  authorId?: string;
+  authorName?: string;
+  authorAvatar?: string;
+  wallpaperId?: string;
+  wallpaperTitle?: string;
+  wallpaperThumbnail?: string;
+  title: string;
+  description: string;
+  read: boolean;
+  createdAt: string;
 }

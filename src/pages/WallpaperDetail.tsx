@@ -122,7 +122,10 @@ export default function WallpaperDetail() {
       resolution.name,
       wallpaper.copyright.watermark,
       wallpaper.title,
-      wallpaper.thumbnailUrl
+      wallpaper.thumbnailUrl,
+      wallpaper.authorId,
+      author?.name,
+      wallpaper.copyright.type
     );
     showToast({ type: "success", message: `开始下载 ${resolution.name} 版本` });
     setShowDownloadDropdown(false);
