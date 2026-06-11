@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-gray-100 font-sans antialiased;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    background-image: radial-gradient(
+        circle at 15% 50%,
+        rgba(34, 211, 238, 0.08) 0%,
+        transparent 50%
+      ),
+      radial-gradient(
+        circle at 85% 20%,
+        rgba(139, 92, 246, 0.06) 0%,
+        transparent 50%
+      ),
+      linear-gradient(rgba(34, 211, 238, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34, 211, 238, 0.02) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-display;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border-light rounded-full hover:bg-surface-hover transition-colors;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface/60 backdrop-blur-xl border border-border;
+  }
+
+  .glass-hover {
+    @apply hover:bg-surface-light/80 transition-all duration-300;
+  }
+
+  .btn-primary {
+    @apply px-5 py-2.5 bg-primary text-background font-medium rounded-full
+      hover:bg-primary-light hover:shadow-lg hover:shadow-primary/25
+      active:scale-95 transition-all duration-200;
+  }
+
+  .btn-secondary {
+    @apply px-5 py-2.5 bg-surface text-gray-100 font-medium rounded-full
+      border border-border hover:bg-surface-light hover:border-primary/50
+      active:scale-95 transition-all duration-200;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-gray-300 font-medium rounded-full
+      hover:bg-surface hover:text-primary
+      transition-all duration-200;
+  }
+
+  .btn-icon {
+    @apply p-2 rounded-full text-gray-300
+      hover:bg-surface-light hover:text-primary
+      transition-all duration-200;
+  }
+
+  .card {
+    @apply bg-surface rounded-2xl border border-border overflow-hidden
+      hover:border-primary/30 hover:shadow-xl hover:shadow-primary/5
+      transition-all duration-300;
+  }
+
+  .input {
+    @apply w-full px-4 py-2.5 bg-surface border border-border rounded-xl
+      text-gray-100 placeholder-gray-500
+      focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20
+      transition-all duration-200;
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium
+      bg-surface border border-border rounded-full text-gray-300
+      hover:bg-surface-light hover:border-primary/40 hover:text-primary
+      cursor-pointer transition-all duration-200;
+  }
+
+  .tag-active {
+    @apply bg-primary/10 border-primary/30 text-primary;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-gray-300
+      hover:bg-surface hover:text-primary transition-all duration-200;
+  }
+
+  .nav-item-active {
+    @apply bg-surface text-primary border border-primary/20;
+  }
+
+  .section-title {
+    @apply text-2xl font-bold font-display mb-6 flex items-center gap-3;
+  }
+
+  .section-title::before {
+    content: "";
+    @apply w-1 h-6 bg-primary rounded-full;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary via-accent-light to-primary bg-clip-text text-transparent;
+    background-size: 200% auto;
+    animation: shimmer 3s linear infinite;
+  }
+
+  .mask-fade-b {
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
