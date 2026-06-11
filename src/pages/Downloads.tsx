@@ -5,7 +5,6 @@ import {
   Calendar,
   Heart,
   Trash2,
-  ChevronRight,
   Monitor,
   Clock,
   Filter,
@@ -16,6 +15,10 @@ import {
   User,
   Shield,
   ChevronDown,
+  FileText,
+  Info,
+  RefreshCcw,
+  Eye,
 } from "lucide-react";
 import { useFavoriteStore } from "@/store/useFavoriteStore";
 import { useWallpaperStore } from "@/store/useWallpaperStore";
@@ -52,6 +55,23 @@ const watermarkOptions: { key: WatermarkFilter; label: string }[] = [
   { key: "with", label: "含水印" },
   { key: "without", label: "无水印" },
 ];
+
+const getFileSizeFromResolution = (resolution: string): string => {
+  const lower = resolution.toLowerCase();
+  if (lower.includes("4k") || lower.includes("uhd") || lower.includes("3840") || lower.includes("2160")) {
+    return "约 8.5 MB";
+  }
+  if (lower.includes("2k") || lower.includes("qhd") || lower.includes("2560") || lower.includes("1440")) {
+    return "约 4.2 MB";
+  }
+  if (lower.includes("1080") || lower.includes("fhd") || lower.includes("1920")) {
+    return "约 2.1 MB";
+  }
+  if (lower.includes("720") || lower.includes("hd") || lower.includes("1280")) {
+    return "约 0.9 MB";
+  }
+  return "未知";
+};
 
 const matchResolution = (downloadResolution: string, filter: ResolutionFilter): boolean => {
   if (filter === "all") return true;
@@ -95,14 +115,29 @@ const matchWatermark = (watermark: boolean | undefined, filter: WatermarkFilter)
   return watermark === false || watermark === undefined;
 };
 
-const copyrightBadgeConfig: Record<CopyrightType, { label: string; bg: string; text: string }> = {
-  free: { label: "免费", bg: "bg-emerald-500/10", text: "text-emerald-400" },
-  cc: { label: "CC 协议", bg: "bg-blue-500/10", text: "text-blue-400" },
-  commercial: { label: "商用", bg: "bg-amber-500/10", text: "text-amber-400" },
+const copyrightBadgeConfig: Record<CopyrightType, { label: string; bg: string; text: string; desc: string }> = {
+  free: {
+    label: "免费",
+    bg: "bg-emerald-500/10",
+    text: "text-emerald-400",
+    desc: "免费授权，可自由使用，无版权限制。",
+  },
+  cc: {
+    label: "CC 协议",
+    bg: "bg-blue-500/10",
+    text: "text-blue-400",
+    desc: "知识共享协议，使用时请遵守具体 CC 条款，通常需署名。",
+  },
+  commercial: {
+    label: "商用",
+    bg: "bg-amber-500/10",
+    text: "text-amber-400",
+    desc: "需获得作者或版权方授权后方可用于商业用途。",
+  },
 };
 
 export default function Downloads() {
-  const { downloads, favorites, clearDownloads } = useFavoriteStore();
+  const { downloads, favorites, clearDownloads, addDownload } = useFavoriteStore();
   const { getWallpaperById } = useWallpaperStore();
   const { showToast } = useToast();
 
@@ -115,6 +150,7 @@ export default function Downloads() {
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearRange, setClearRange] = useState<ClearRange>("week");
   const [imgLoaded, setImgLoaded] = useState<Record<string, boolean>>({});
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const uniqueAuthors = useMemo(() => {
     const map = new Map<string, string>();
@@ -259,10 +295,41 @@ export default function Downloads() {
     return "";
   };
 
+  const resolveAuthorId = (download: (typeof downloads)[0]) => {
+    if (download.authorId) return download.authorId;
+    const wp = getWallpaperById(download.wallpaperId);
+    return wp?.authorId;
+  };
+
   const resolveCopyrightType = (download: (typeof downloads)[0]): CopyrightType | undefined => {
     if (download.copyrightType) return download.copyrightType;
     const wp = getWallpaperById(download.wallpaperId);
     return wp?.copyright?.type;
+  };
+
+  const handleRedownload = (download: (typeof downloads)[0]) => {
+    const title = resolveTitle(download);
+    const thumbnail = resolveThumbnail(download);
+    const authorName = resolveAuthorName(download);
+    const authorId = resolveAuthorId(download);
+    const copyrightType = resolveCopyrightType(download);
+
+    addDownload(
+      download.wallpaperId,
+      download.resolution,
+      download.watermark,
+      title,
+      thumbnail,
+      authorId,
+      authorName,
+      copyrightType
+    );
+    showToast({ type: "success", message: `「${title}」已重新加入下载队列` });
+  };
+
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedId((prev) => (prev === id ? null : id));
   };
 
   const statCards = [
@@ -544,94 +611,269 @@ export default function Downloads() {
                     const thumbnail = resolveThumbnail(download);
                     const title = resolveTitle(download);
                     const authorName = resolveAuthorName(download);
+                    const authorId = resolveAuthorId(download);
                     const copyrightType = resolveCopyrightType(download);
+                    const isExpanded = expandedId === download.id;
 
                     return (
-                      <Link
+                      <div
                         key={download.id}
-                        to={wallpaper ? `/wallpaper/${wallpaper.id}` : "#"}
-                        className="group flex items-center gap-4 p-4 rounded-xl bg-surface border border-border hover:border-primary/40 hover:bg-surface-light transition-all"
+                        className={cn(
+                          "rounded-xl bg-surface border transition-all overflow-hidden",
+                          isExpanded
+                            ? "border-primary/40"
+                            : "border-border hover:border-primary/40 hover:bg-surface-light"
+                        )}
                       >
-                        <div className="relative w-28 h-16 rounded-lg overflow-hidden bg-background-light shrink-0">
-                          {thumbnail && !imgLoaded[download.id] && (
-                            <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-surface to-surface-light" />
-                          )}
-                          {thumbnail ? (
-                            <img
-                              src={thumbnail}
-                              alt={title}
-                              className={cn(
-                                "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
-                                imgLoaded[download.id] ? "opacity-100" : "opacity-0"
-                              )}
-                              onLoad={() =>
-                                setImgLoaded((prev) => ({ ...prev, [download.id]: true }))
-                              }
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-600">
-                              <Monitor className="w-6 h-6" />
-                            </div>
-                          )}
-                        </div>
+                        <div
+                          onClick={(e) => toggleExpand(download.id, e)}
+                          className="flex items-center gap-4 p-4 cursor-pointer"
+                        >
+                          <div className="relative w-28 h-16 rounded-lg overflow-hidden bg-background-light shrink-0 pointer-events-none">
+                            {thumbnail && !imgLoaded[download.id] && (
+                              <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-surface to-surface-light" />
+                            )}
+                            {thumbnail ? (
+                              <img
+                                src={thumbnail}
+                                alt={title}
+                                className={cn(
+                                  "w-full h-full object-cover transition-all duration-300",
+                                  isExpanded ? "scale-105" : "",
+                                  imgLoaded[download.id] ? "opacity-100" : "opacity-0"
+                                )}
+                                onLoad={() =>
+                                  setImgLoaded((prev) => ({ ...prev, [download.id]: true }))
+                                }
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-600">
+                                <Monitor className="w-6 h-6" />
+                              </div>
+                            )}
+                          </div>
 
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-medium text-gray-100 truncate group-hover:text-primary transition-colors">
-                            {title}
-                          </h3>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-1.5">
-                            <span className="flex items-center gap-1 text-xs text-gray-500">
-                              <Monitor className="w-3 h-3" />
-                              {download.resolution}
-                            </span>
-                            <span className="flex items-center gap-1 text-xs text-gray-500">
-                              <Clock className="w-3 h-3" />
-                              {formatFullDate(download.downloadedAt)}
-                            </span>
-                            {authorName && (
+                          <div className="flex-1 min-w-0 pointer-events-none">
+                            <h3 className={cn(
+                              "text-sm font-medium truncate transition-colors",
+                              isExpanded ? "text-primary" : "text-gray-100"
+                            )}>
+                              {title}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-1.5">
                               <span className="flex items-center gap-1 text-xs text-gray-500">
-                                <User className="w-3 h-3" />
-                                {authorName}
+                                <Monitor className="w-3 h-3" />
+                                {download.resolution}
                               </span>
-                            )}
+                              <span className="flex items-center gap-1 text-xs text-gray-500">
+                                <Clock className="w-3 h-3" />
+                                {formatFullDate(download.downloadedAt)}
+                              </span>
+                              {authorName && (
+                                <span className="flex items-center gap-1 text-xs text-gray-500">
+                                  <User className="w-3 h-3" />
+                                  {authorName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="flex flex-col items-end gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                {download.watermark !== undefined && (
+                                  <div
+                                    className={cn(
+                                      "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
+                                      download.watermark
+                                        ? "bg-amber-500/10 text-amber-400"
+                                        : "bg-emerald-500/10 text-emerald-400"
+                                    )}
+                                  >
+                                    <Droplets className="w-3 h-3" />
+                                    {download.watermark ? "含水印" : "无水印"}
+                                  </div>
+                                )}
+                                {copyrightType && (
+                                  <div
+                                    className={cn(
+                                      "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
+                                      copyrightBadgeConfig[copyrightType].bg,
+                                      copyrightBadgeConfig[copyrightType].text
+                                    )}
+                                  >
+                                    <Shield className="w-3 h-3" />
+                                    {copyrightBadgeConfig[copyrightType].label}
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-xs">
+                                  <Download className="w-3 h-3" />
+                                  已下载
+                                </div>
+                              </div>
+                            </div>
+                            <ChevronDown
+                              className={cn(
+                                "w-5 h-5 text-gray-400 transition-transform duration-200 shrink-0",
+                                isExpanded ? "rotate-180 text-primary" : ""
+                              )}
+                            />
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end gap-2 shrink-0">
-                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                            {download.watermark !== undefined && (
-                              <div
-                                className={cn(
-                                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
-                                  download.watermark
-                                    ? "bg-amber-500/10 text-amber-400"
-                                    : "bg-emerald-500/10 text-emerald-400"
-                                )}
-                              >
-                                <Droplets className="w-3 h-3" />
-                                {download.watermark ? "含水印" : "无水印"}
+                        {isExpanded && (
+                          <div className="px-4 pb-4 pt-0">
+                            <div className="border-t border-border pt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                              <div className="rounded-xl bg-background-light/50 border border-border p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                    <FileText className="w-4 h-4 text-blue-400" />
+                                  </div>
+                                  <h4 className="text-sm font-semibold text-gray-100">文件信息</h4>
+                                </div>
+                                <div className="space-y-2.5">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">本次下载分辨率</span>
+                                    <span className="text-gray-200 font-medium">{download.resolution}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">预计文件大小</span>
+                                    <span className="text-gray-200 font-medium">{getFileSizeFromResolution(download.resolution)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">下载时间</span>
+                                    <span className="text-gray-200 font-medium">{formatFullDate(download.downloadedAt)}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">记录 ID</span>
+                                    <span className="text-gray-400 font-mono text-[11px]">{download.id}</span>
+                                  </div>
+                                </div>
                               </div>
-                            )}
-                            {copyrightType && (
-                              <div
-                                className={cn(
-                                  "flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
-                                  copyrightBadgeConfig[copyrightType].bg,
-                                  copyrightBadgeConfig[copyrightType].text
-                                )}
-                              >
-                                <Shield className="w-3 h-3" />
-                                {copyrightBadgeConfig[copyrightType].label}
+
+                              <div className="rounded-xl bg-background-light/50 border border-border p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                    <Info className="w-4 h-4 text-purple-400" />
+                                  </div>
+                                  <h4 className="text-sm font-semibold text-gray-100">授权说明</h4>
+                                </div>
+                                <div className="space-y-3">
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <Shield className="w-3.5 h-3.5 text-gray-400" />
+                                      <span className="text-xs text-gray-500">版权类型</span>
+                                      {copyrightType ? (
+                                        <span className={cn(
+                                          "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px]",
+                                          copyrightBadgeConfig[copyrightType].bg,
+                                          copyrightBadgeConfig[copyrightType].text
+                                        )}>
+                                          {copyrightBadgeConfig[copyrightType].label}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[11px] text-gray-500">未记录</span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 leading-relaxed pl-5.5">
+                                      {copyrightType
+                                        ? copyrightBadgeConfig[copyrightType].desc
+                                        : "暂无版权信息，请联系作者确认使用权限。"}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <Droplets className="w-3.5 h-3.5 text-gray-400" />
+                                      <span className="text-xs text-gray-500">水印状态</span>
+                                      <span className={cn(
+                                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px]",
+                                        download.watermark
+                                          ? "bg-amber-500/10 text-amber-400"
+                                          : "bg-emerald-500/10 text-emerald-400"
+                                      )}>
+                                        {download.watermark ? "含官方水印" : "纯净无水印"}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 leading-relaxed pl-5.5">
+                                      {download.watermark
+                                        ? "下载的图片包含作者或平台水印，用于标识来源，建议非商用场景使用。"
+                                        : "下载的图片为纯净版本，无任何水印，适合展示和使用。"}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                      <User className="w-3.5 h-3.5 text-gray-400" />
+                                      <span className="text-xs text-gray-500">作者署名</span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 leading-relaxed pl-5.5">
+                                      {authorName
+                                        ? `本作品由「${authorName}」创作，如需转载或商用，请保留作者署名并联系作者获得授权。`
+                                        : "暂无作者信息，使用前请确认版权归属。"}
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
-                            )}
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-xs">
-                              <Download className="w-3 h-3" />
-                              已下载
+
+                              <div className="rounded-xl bg-background-light/50 border border-border p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                                    <RefreshCcw className="w-4 h-4 text-amber-400" />
+                                  </div>
+                                  <h4 className="text-sm font-semibold text-gray-100">快捷操作</h4>
+                                </div>
+                                <div className="space-y-2">
+                                  {wallpaper ? (
+                                    <Link
+                                      to={`/wallpaper/${wallpaper.id}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-primary/10 border border-primary/30 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      查看壁纸
+                                    </Link>
+                                  ) : (
+                                    <button
+                                      disabled
+                                      className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-gray-500/10 border border-gray-500/20 text-gray-500 text-xs font-medium cursor-not-allowed"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                      壁纸已移除
+                                    </button>
+                                  )}
+                                  {authorId ? (
+                                    <Link
+                                      to={`/search?author=${authorId}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-surface border border-border text-gray-200 text-xs font-medium hover:bg-surface-light hover:border-primary/30 hover:text-primary transition-colors"
+                                    >
+                                      <User className="w-3.5 h-3.5" />
+                                      查看作者作品
+                                    </Link>
+                                  ) : (
+                                    <button
+                                      disabled
+                                      className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-gray-500/10 border border-gray-500/20 text-gray-500 text-xs font-medium cursor-not-allowed"
+                                    >
+                                      <User className="w-3.5 h-3.5" />
+                                      作者信息缺失
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRedownload(download);
+                                    }}
+                                    className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-xs font-medium hover:bg-green-500/20 transition-colors"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    再次下载
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                        </div>
-                      </Link>
+                        )}
+                      </div>
                     );
                   })}
                 </div>

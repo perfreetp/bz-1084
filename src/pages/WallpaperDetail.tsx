@@ -53,7 +53,7 @@ function buildSearchQuery(params: Record<string, string | string[] | undefined>)
 export default function WallpaperDetail() {
   const { id } = useParams<{ id: string }>();
   const { getWallpaperById, getSimilarWallpapers } = useWallpaperStore();
-  const { isWallpaperFavorited, addToFavorites, removeWallpaperFromAll, subscribe, unsubscribe, isSubscribed, addDownload } = useFavoriteStore();
+  const { isWallpaperFavorited, addToFavorites, removeWallpaperFromAll, subscribe, unsubscribe, isSubscribed, addDownload, addNotification } = useFavoriteStore();
   const { user, updateSettings } = useUserStore();
   const { showToast } = useToast();
 
@@ -95,6 +95,28 @@ export default function WallpaperDetail() {
       showToast({ type: "info", message: `已取消订阅 ${author.name}` });
     } else {
       subscribe(author.id);
+      if (wallpaper) {
+        addNotification({
+          type: "subscription_update",
+          authorId: author.id,
+          authorName: author.name,
+          authorAvatar: author.avatarUrl,
+          wallpaperId: wallpaper.id,
+          wallpaperTitle: wallpaper.title,
+          wallpaperThumbnail: wallpaper.thumbnailUrl,
+          title: `${author.name} 发布了新壁纸`,
+          description: `「${wallpaper.title}」— ${wallpaper.description}`,
+        });
+      } else {
+        addNotification({
+          type: "subscription_update",
+          authorId: author.id,
+          authorName: author.name,
+          authorAvatar: author.avatarUrl,
+          title: `${author.name} 有了新动态`,
+          description: `你已订阅 ${author.name}，后续新作品将在此展示`,
+        });
+      }
       showToast({ type: "success", message: `已订阅 ${author.name}` });
     }
   };

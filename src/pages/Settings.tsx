@@ -22,8 +22,10 @@ import {
   Sparkles,
   Settings as SettingsIcon,
   ChevronRight,
+  ChevronDown,
   Hash,
   Eye,
+  Layers,
   Users,
   BellRing,
   CheckCheck,
@@ -606,9 +608,26 @@ function SubscriptionSection({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 p-3 bg-surface-light/50 rounded-lg">
-                    暂无已订阅作者的更新动态
-                  </p>
+                  <div className="p-4 bg-surface-light/50 rounded-lg border border-border/50">
+                    <p className="text-sm text-gray-500 mb-3">暂无已订阅作者的更新动态</p>
+                    <div className="flex flex-wrap gap-2">
+                      {subscribedAuthors.map((author) => (
+                        <button
+                          key={author.id}
+                          onClick={() => handleViewWorks(author.id)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface border border-border hover:border-primary/30 hover:text-primary transition-colors text-xs text-gray-300"
+                        >
+                          <img
+                            src={author.avatarUrl}
+                            alt={author.name}
+                            className="w-4 h-4 rounded-full object-cover"
+                          />
+                          {author.name} 的作品
+                          <Eye className="w-3 h-3" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -829,6 +848,12 @@ function TagsSection({
 
 type NotificationFilter = "all" | "unread" | "read" | "subscription_update";
 
+type AuthorFilterOption = {
+  id: string;
+  name: string;
+  unreadCount: number;
+};
+
 function NotificationsSection({
   notifications,
   updateNotifications,
@@ -848,22 +873,49 @@ function NotificationsSection({
 }) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<NotificationFilter>("all");
+  const [activeAuthorFilter, setActiveAuthorFilter] = useState<string>("all");
+  const [authorDropdownOpen, setAuthorDropdownOpen] = useState(false);
   const [state, setState] = useState(notificationSettings);
 
   const unreadCount = useMemo(() => getUnreadCount(), [notifications, getUnreadCount]);
 
+  const authorOptions = useMemo<AuthorFilterOption[]>(() => {
+    const map = new Map<string, AuthorFilterOption>();
+    notifications.forEach((n) => {
+      if (n.type === "subscription_update" && n.authorId && n.authorName) {
+        const existing = map.get(n.authorId);
+        if (existing) {
+          if (!n.read) existing.unreadCount++;
+        } else {
+          map.set(n.authorId, {
+            id: n.authorId,
+            name: n.authorName,
+            unreadCount: n.read ? 0 : 1,
+          });
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.unreadCount - a.unreadCount);
+  }, [notifications]);
+
   const filteredNotifications = useMemo(() => {
+    let result = notifications;
     switch (filter) {
       case "unread":
-        return notifications.filter((n) => !n.read);
+        result = result.filter((n) => !n.read);
+        break;
       case "read":
-        return notifications.filter((n) => n.read);
+        result = result.filter((n) => n.read);
+        break;
       case "subscription_update":
-        return notifications.filter((n) => n.type === "subscription_update");
-      default:
-        return notifications;
+        result = result.filter((n) => n.type === "subscription_update");
+        break;
     }
-  }, [notifications, filter]);
+    if (activeAuthorFilter !== "all") {
+      result = result.filter((n) => n.authorId === activeAuthorFilter);
+    }
+    return result;
+  }, [notifications, filter, activeAuthorFilter]);
 
   const filterTabs: { key: NotificationFilter; label: string }[] = [
     { key: "all", label: "全部" },
@@ -872,7 +924,26 @@ function NotificationsSection({
     { key: "subscription_update", label: "订阅更新" },
   ];
 
-  const handleClickNotification = (notification: NotificationMessage) => {
+  const getTabCount = (key: NotificationFilter) => {
+    let base = notifications;
+    switch (key) {
+      case "unread":
+        base = base.filter((n) => !n.read);
+        break;
+      case "read":
+        base = base.filter((n) => n.read);
+        break;
+      case "subscription_update":
+        base = base.filter((n) => n.type === "subscription_update");
+        break;
+    }
+    if (activeAuthorFilter !== "all") {
+      base = base.filter((n) => n.authorId === activeAuthorFilter);
+    }
+    return base.length;
+  };
+
+  const handleMainClick = (notification: NotificationMessage) => {
     if (!notification.read) {
       markNotificationRead(notification.id);
     }
@@ -882,6 +953,16 @@ function NotificationsSection({
       } else if (notification.authorId) {
         navigate(`/search?author=${notification.authorId}`);
       }
+    }
+  };
+
+  const handleViewAuthorWorks = (e: React.MouseEvent, notification: NotificationMessage) => {
+    e.stopPropagation();
+    if (!notification.read) {
+      markNotificationRead(notification.id);
+    }
+    if (notification.authorId) {
+      navigate(`/search?author=${notification.authorId}`);
     }
   };
 
@@ -924,6 +1005,8 @@ function NotificationsSection({
     },
   ];
 
+  const selectedAuthorName = authorOptions.find((a) => a.id === activeAuthorFilter)?.name;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <section className="glass rounded-2xl p-6">
@@ -951,40 +1034,122 @@ function NotificationsSection({
           </div>
         )}
 
-        <div className="flex gap-2 mb-5 p-1 bg-surface rounded-xl w-fit">
-          {filterTabs.map(({ key, label }) => {
-            const count =
-              key === "all"
-                ? notifications.length
-                : key === "unread"
-                ? notifications.filter((n) => !n.read).length
-                : key === "read"
-                ? notifications.filter((n) => n.read).length
-                : notifications.filter((n) => n.type === "subscription_update").length;
-            return (
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          <div className="flex gap-2 p-1 bg-surface rounded-xl w-fit">
+            {filterTabs.map(({ key, label }) => {
+              const count = getTabCount(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${
+                    filter === key
+                      ? "bg-primary text-background"
+                      : "text-gray-400 hover:text-gray-200"
+                  }`}
+                >
+                  {label}
+                  {count > 0 && (
+                    <span
+                      className={`ml-1.5 text-xs ${
+                        filter === key ? "text-background/70" : "text-gray-500"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {authorOptions.length > 0 && (
+            <div className="relative">
               <button
-                key={key}
-                onClick={() => setFilter(key)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                  filter === key
-                    ? "bg-primary text-background"
-                    : "text-gray-400 hover:text-gray-200"
+                onClick={() => setAuthorDropdownOpen((v) => !v)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm transition-all ${
+                  activeAuthorFilter !== "all"
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-surface border-border text-gray-300 hover:border-primary/20"
                 }`}
               >
-                {label}
-                {count > 0 && (
-                  <span
-                    className={`ml-1.5 text-xs ${
-                      filter === key ? "text-background/70" : "text-gray-500"
-                    }`}
-                  >
-                    {count}
-                  </span>
-                )}
+                <User className="w-4 h-4" />
+                <span className="font-medium">
+                  {activeAuthorFilter !== "all" ? selectedAuthorName : "全部作者"}
+                </span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${authorDropdownOpen ? "rotate-180" : ""}`} />
               </button>
-            );
-          })}
+
+              {authorDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setAuthorDropdownOpen(false)}
+                  />
+                  <div className="absolute top-full left-0 mt-2 w-56 glass rounded-xl border border-border shadow-xl z-20 py-1 max-h-72 overflow-y-auto">
+                    <button
+                      onClick={() => {
+                        setActiveAuthorFilter("all");
+                        setAuthorDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
+                        activeAuthorFilter === "all"
+                          ? "bg-primary/10 text-primary"
+                          : "text-gray-300 hover:bg-surface-hover"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        全部作者
+                      </span>
+                    </button>
+                    {authorOptions.map((author) => (
+                      <button
+                        key={author.id}
+                        onClick={() => {
+                          setActiveAuthorFilter(author.id);
+                          setAuthorDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between ${
+                          activeAuthorFilter === author.id
+                            ? "bg-primary/10 text-primary"
+                            : "text-gray-300 hover:bg-surface-hover"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 truncate">
+                          <User className="w-4 h-4 shrink-0" />
+                          <span className="truncate">{author.name}</span>
+                        </span>
+                        {author.unreadCount > 0 && (
+                          <span className="ml-2 shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary/20 text-primary text-xs font-medium flex items-center justify-center">
+                            {author.unreadCount}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
+
+        {activeAuthorFilter !== "all" && selectedAuthorName && (
+          <div className="flex items-center gap-2 mb-5 px-3 py-2 bg-surface border border-border rounded-xl">
+            <span className="text-xs text-gray-400">当前筛选：</span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium">
+              <User className="w-3 h-3" />
+              {selectedAuthorName}
+            </span>
+            <button
+              onClick={() => setActiveAuthorFilter("all")}
+              className="ml-auto p-1 rounded-md text-gray-400 hover:text-gray-200 hover:bg-surface-hover transition-colors"
+              title="清除作者筛选"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         <div className="space-y-2">
           {filteredNotifications.length === 0 ? (
@@ -1001,54 +1166,76 @@ function NotificationsSection({
             </div>
           ) : (
             filteredNotifications.map((notification) => (
-              <button
+              <div
                 key={notification.id}
-                onClick={() => handleClickNotification(notification)}
-                className={`w-full text-left flex items-start gap-3 p-4 rounded-xl border transition-all ${
+                className={`w-full flex items-start gap-3 p-4 rounded-xl border transition-all ${
                   notification.read
                     ? "bg-surface border-border hover:border-primary/20"
                     : "bg-primary/5 border-primary/20 hover:border-primary/40"
                 }`}
               >
-                <div className="shrink-0 mt-0.5">
-                  {notification.authorAvatar ? (
-                    <img
-                      src={notification.authorAvatar}
-                      alt={notification.authorName}
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-surface-light flex items-center justify-center">
-                      {notification.type === "system" ? (
-                        <Bell className="w-5 h-5 text-gray-400" />
-                      ) : notification.type === "weekly_digest" ? (
-                        <Sparkles className="w-5 h-5 text-gray-400" />
-                      ) : (
-                        <Bell className="w-5 h-5 text-gray-400" />
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className={`text-sm font-medium truncate ${notification.read ? "text-gray-300" : "text-gray-100"}`}>
-                      {notification.title}
-                    </p>
-                    {!notification.read && (
-                      <Circle className="w-2.5 h-2.5 fill-primary text-primary shrink-0" />
+                <button
+                  onClick={() => handleMainClick(notification)}
+                  className="flex-1 min-w-0 flex items-start gap-3 text-left"
+                >
+                  <div className="shrink-0 mt-0.5">
+                    {notification.authorAvatar ? (
+                      <img
+                        src={notification.authorAvatar}
+                        alt={notification.authorName}
+                        className="w-10 h-10 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-surface-light flex items-center justify-center">
+                        {notification.type === "system" ? (
+                          <Bell className="w-5 h-5 text-gray-400" />
+                        ) : notification.type === "weekly_digest" ? (
+                          <Sparkles className="w-5 h-5 text-gray-400" />
+                        ) : (
+                          <Bell className="w-5 h-5 text-gray-400" />
+                        )}
+                      </div>
                     )}
                   </div>
-                  <p className="text-sm text-gray-400 mt-0.5 line-clamp-2">{notification.description}</p>
-                  <p className="text-xs text-gray-500 mt-1.5">{formatDate(notification.createdAt)}</p>
-                </div>
-                {notification.type === "subscription_update" && notification.wallpaperThumbnail && (
-                  <img
-                    src={notification.wallpaperThumbnail}
-                    alt=""
-                    className="w-14 h-10 rounded-lg object-cover shrink-0"
-                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className={`text-sm font-medium truncate ${notification.read ? "text-gray-300" : "text-gray-100"}`}>
+                        {notification.title}
+                      </p>
+                      {!notification.read && (
+                        <Circle className="w-2.5 h-2.5 fill-primary text-primary shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-400 mt-0.5 line-clamp-2">{notification.description}</p>
+                    <p className="text-xs text-gray-500 mt-1.5">{formatDate(notification.createdAt)}</p>
+                  </div>
+                  {notification.type === "subscription_update" && notification.wallpaperThumbnail && (
+                    <img
+                      src={notification.wallpaperThumbnail}
+                      alt=""
+                      className="w-14 h-10 rounded-lg object-cover shrink-0"
+                    />
+                  )}
+                </button>
+
+                {notification.authorId && (
+                  <div className="shrink-0 flex flex-col gap-2 ml-2">
+                    <button
+                      onClick={(e) => handleViewAuthorWorks(e, notification)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-surface-hover border border-border text-gray-300 hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+                      title="查看该作者作品"
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">作者作品</span>
+                    </button>
+                    {notification.wallpaperId && (
+                      <div className="text-[10px] text-gray-500 text-center leading-tight px-1">
+                        点击左侧<br/>查看壁纸
+                      </div>
+                    )}
+                  </div>
                 )}
-              </button>
+              </div>
             ))
           )}
         </div>

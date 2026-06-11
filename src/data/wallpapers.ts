@@ -1,4 +1,25 @@
-import type { Wallpaper } from "@/types";
+import type { Resolution, Wallpaper } from "@/types";
+
+const buildResolutions = (imageUrl: string, seed: number): Resolution[] => {
+  const allResolutions: Resolution[] = [
+    { name: "4K UHD", width: 3840, height: 2160, url: imageUrl, size: "8.5 MB" },
+    { name: "2K QHD", width: 2560, height: 1440, url: imageUrl, size: "4.2 MB" },
+    { name: "1080P FHD", width: 1920, height: 1080, url: imageUrl, size: "2.1 MB" },
+    { name: "720P HD", width: 1280, height: 720, url: imageUrl, size: "0.9 MB" },
+  ];
+
+  const mod = seed % 10;
+
+  if (mod >= 0 && mod <= 2) {
+    return allResolutions;
+  } else if (mod >= 3 && mod <= 5) {
+    return allResolutions.slice(1);
+  } else if (mod >= 6 && mod <= 7) {
+    return allResolutions.slice(2);
+  } else {
+    return allResolutions.slice(1, 3);
+  }
+};
 
 const createWallpaper = (
   id: string,
@@ -11,21 +32,20 @@ const createWallpaper = (
   colors: string[],
   tags: string[],
   daysAgo: number,
-  stats: { views: number; downloads: number; favorites: number }
+  stats: { views: number; downloads: number; favorites: number },
+  resolutions?: Resolution[]
 ): Wallpaper => {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
+  const seed = parseInt(id.slice(1));
+  const finalResolutions = resolutions ?? buildResolutions(imageUrl, seed);
   return {
     id,
     title,
     description,
     imageUrl,
     thumbnailUrl: imageUrl,
-    resolutions: [
-      { name: "4K UHD", width: 3840, height: 2160, url: imageUrl, size: "8.5 MB" },
-      { name: "2K QHD", width: 2560, height: 1440, url: imageUrl, size: "4.2 MB" },
-      { name: "1080P FHD", width: 1920, height: 1080, url: imageUrl, size: "2.1 MB" },
-    ],
+    resolutions: finalResolutions,
     aspectRatio,
     colors,
     tags,
@@ -203,7 +223,7 @@ export const wallpapers: Wallpaper[] = [
     "w13",
     "日落海滩",
     "金色夕阳下的宁静海滩",
-    "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&h=1080&fit=crop",
+    "https://images.unsplash.com/photo-1507525428034-723cf961d3e?w=1920&h=1080&fit=crop",
     "nature",
     "a1",
     "16:9",
