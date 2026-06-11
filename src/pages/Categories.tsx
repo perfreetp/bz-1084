@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import {
   Mountain,
   Building2,
@@ -23,6 +23,21 @@ import { useWallpaperStore } from "@/store/useWallpaperStore";
 import { categories } from "@/data/categories";
 import { useToast } from "@/hooks/useToast";
 import { formatNumber } from "@/utils/format";
+
+function buildSearchQuery(params: Record<string, string | string[] | undefined>): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "" && (Array.isArray(value) ? value.length > 0 : true)) {
+      if (Array.isArray(value)) {
+        value.forEach((v) => searchParams.append(key, v));
+      } else {
+        searchParams.set(key, value);
+      }
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `/search?${query}` : "/search";
+}
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Mountain,
@@ -63,7 +78,7 @@ export default function Categories() {
   const handleExploreAll = () => {
     if (selectedCategory) {
       setFilters({ categoryId: selectedCategory });
-      navigate("/explore");
+      navigate(buildSearchQuery({ category: selectedCategory }));
     }
   };
 

@@ -85,6 +85,9 @@ export interface Download {
   resolution: string;
   downloadedAt: string;
   filePath?: string;
+  watermark?: boolean;
+  wallpaperTitle?: string;
+  wallpaperThumbnail?: string;
 }
 
 export interface Subscription {

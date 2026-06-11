@@ -29,6 +29,21 @@ import { categories } from "@/data/categories";
 import { useToast } from "@/hooks/useToast";
 import { formatNumber } from "@/utils/format";
 
+function buildSearchQuery(params: Record<string, string | string[] | undefined>): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "" && (Array.isArray(value) ? value.length > 0 : true)) {
+      if (Array.isArray(value)) {
+        value.forEach((v) => searchParams.append(key, v));
+      } else {
+        searchParams.set(key, value);
+      }
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `/search?${query}` : "/search";
+}
+
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Mountain,
   Building2,
@@ -64,20 +79,20 @@ export default function Home() {
     if (searchQuery.trim()) {
       searchWallpapers(searchQuery);
       setFilters({ query: searchQuery });
-      navigate("/explore");
+      navigate(buildSearchQuery({ q: searchQuery }));
       showToast({ type: "info", message: `正在搜索: ${searchQuery}` });
     }
   };
 
   const handleTagClick = (tagName: string) => {
     setFilters({ tags: [tagName] });
-    navigate("/explore");
+    navigate(buildSearchQuery({ tag: tagName }));
     showToast({ type: "info", message: `筛选标签: ${tagName}` });
   };
 
   const handleCategoryClick = (categoryId: string) => {
     setFilters({ categoryId });
-    navigate("/explore");
+    navigate(buildSearchQuery({ category: categoryId }));
   };
 
   const goToSlide = (index: number) => {
@@ -153,7 +168,7 @@ export default function Home() {
               <Sparkles className="w-6 h-6 text-primary" />
               精选推荐
             </h2>
-            <Link to="/explore" className="btn-ghost flex items-center gap-2 text-sm">
+            <Link to="/search" className="btn-ghost flex items-center gap-2 text-sm">
               查看全部
               <ArrowRight className="w-4 h-4" />
             </Link>
@@ -243,7 +258,7 @@ export default function Home() {
               <Flame className="w-6 h-6 text-red-500" />
               热门排行榜 Top 10
             </h2>
-            <Link to="/explore" className="btn-ghost flex items-center gap-2 text-sm">
+            <Link to="/search" className="btn-ghost flex items-center gap-2 text-sm">
               完整榜单
               <ArrowRight className="w-4 h-4" />
             </Link>
@@ -345,7 +360,7 @@ export default function Home() {
               <Clock className="w-6 h-6 text-primary" />
               最新壁纸
             </h2>
-            <Link to="/explore" className="btn-ghost flex items-center gap-2 text-sm">
+            <Link to="/search" className="btn-ghost flex items-center gap-2 text-sm">
               更多
               <ArrowRight className="w-4 h-4" />
             </Link>

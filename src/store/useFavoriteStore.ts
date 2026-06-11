@@ -32,7 +32,7 @@ interface FavoriteState {
   batchMoveFavorites: (favoriteIds: string[], targetGroupId: string) => void;
   batchRemoveFavorites: (favoriteIds: string[]) => void;
 
-  addDownload: (wallpaperId: string, resolution: string) => void;
+  addDownload: (wallpaperId: string, resolution: string, watermark?: boolean, wallpaperTitle?: string, wallpaperThumbnail?: string) => void;
   clearDownloads: (beforeDate?: string) => void;
   getDownloadedWallpaperIds: () => string[];
 
@@ -167,12 +167,15 @@ export const useFavoriteStore = create<FavoriteState>((set, get) => ({
     });
   },
 
-  addDownload: (wallpaperId, resolution) => {
+  addDownload: (wallpaperId, resolution, watermark, wallpaperTitle, wallpaperThumbnail) => {
     const newDownload: Download = {
       id: "d_" + Date.now(),
       wallpaperId,
       resolution,
       downloadedAt: new Date().toISOString(),
+      watermark,
+      wallpaperTitle,
+      wallpaperThumbnail,
     };
     set((state) => {
       const downloads = [newDownload, ...state.downloads];

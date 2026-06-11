@@ -23,6 +23,9 @@ import {
   Settings as SettingsIcon,
   ChevronRight,
   Hash,
+  Eye,
+  Users,
+  BellRing,
 } from "lucide-react";
 import { useUserStore } from "@/store/useUserStore";
 import { useFavoriteStore } from "@/store/useFavoriteStore";
@@ -97,9 +100,12 @@ export default function Settings() {
             {activeTab === "subscription" && (
               <SubscriptionSection
                 subscriptions={subscriptions}
+                subscribe={subscribe}
                 unsubscribe={unsubscribe}
                 isSubscribed={isSubscribed}
                 showToast={showToast}
+                navigate={navigate}
+                notificationsEnabled={user.settings.notifications.subscriptionUpdate}
               />
             )}
             {activeTab === "tags" && (
@@ -436,22 +442,54 @@ function ScheduleSection({
   );
 }
 
+type SubscriptionTab = "subscribed" | "recommended";
+
 function SubscriptionSection({
   subscriptions,
+  subscribe,
   unsubscribe,
   isSubscribed,
   showToast,
+  navigate,
+  notificationsEnabled,
 }: {
   subscriptions: ReturnType<typeof useFavoriteStore.getState>["subscriptions"];
+  subscribe: (authorId: string) => void;
   unsubscribe: (authorId: string) => void;
   isSubscribed: (authorId: string) => boolean;
   showToast: ReturnType<typeof useToast>["showToast"];
+  navigate: (to: string) => void;
+  notificationsEnabled: boolean;
 }) {
-  const subscribedAuthors = authors.filter((a) => isSubscribed(a.id));
+  const [subTab, setSubTab] = useState<SubscriptionTab>("subscribed");
+
+  const subscribedAuthors = useMemo(() => authors.filter((a) => isSubscribed(a.id)), [isSubscribed]);
+  const recommendedAuthors = useMemo(
+    () => authors.filter((a) => !isSubscribed(a.id)).slice(0, 6),
+    [isSubscribed]
+  );
+
+  const recentUpdates = useMemo(
+    () => [
+      { authorId: "a1", authorName: "星河漫步", avatarUrl: authors[0]?.avatarUrl, time: "2 小时前", content: "发布了新壁纸" },
+      { authorId: "a4", authorName: "城市猎人", avatarUrl: authors[3]?.avatarUrl, time: "5 小时前", content: "发布了新壁纸" },
+      { authorId: "a5", authorName: "梦幻画师", avatarUrl: authors[4]?.avatarUrl, time: "昨天", content: "发布了新壁纸" },
+    ],
+    []
+  );
+
+  const handleSubscribe = (authorId: string, authorName: string) => {
+    subscribe(authorId);
+    showToast({ type: "success", message: `已订阅 ${authorName}` });
+  };
 
   const handleUnsubscribe = (authorId: string, authorName: string) => {
     unsubscribe(authorId);
     showToast({ type: "info", message: `已取消订阅 ${authorName}` });
+  };
+
+  const handleViewWorks = () => {
+    navigate("/search");
   };
 
   return (
@@ -460,48 +498,180 @@ function SubscriptionSection({
         <h2 className="section-title">来源订阅</h2>
         <p className="text-gray-400 mb-6">已订阅 {subscriptions.length} 位作者</p>
 
-        {subscribedAuthors.length === 0 ? (
-          <div className="text-center py-16">
-            <UserPlus className="w-16 h-16 mx-auto text-gray-600 mb-4" />
-            <p className="text-gray-400">暂无订阅的作者</p>
-            <p className="text-gray-500 text-sm mt-1">浏览壁纸时可以关注喜欢的作者</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {subscribedAuthors.map((author) => (
-              <div
-                key={author.id}
-                className="flex items-center gap-4 p-4 bg-surface rounded-xl border border-border hover:border-primary/30 transition-colors"
-              >
-                <img
-                  src={author.avatarUrl}
-                  alt={author.name}
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-100">{author.name}</p>
-                  <p className="text-sm text-gray-400 truncate">{author.bio}</p>
-                  <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <ImageIcon className="w-3 h-3" />
-                      {author.wallpaperCount} 张壁纸
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Heart className="w-3 h-3" />
-                      {author.followerCount.toLocaleString()} 关注
-                    </span>
-                  </div>
+        <div className="flex gap-2 mb-6 p-1 bg-surface rounded-xl w-fit">
+          <button
+            onClick={() => setSubTab("subscribed")}
+            className={`px-5 py-2 rounded-lg font-medium transition-all ${
+              subTab === "subscribed"
+                ? "bg-primary text-background"
+                : "text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            <Users className="w-4 h-4 inline mr-2" />
+            已订阅
+          </button>
+          <button
+            onClick={() => setSubTab("recommended")}
+            className={`px-5 py-2 rounded-lg font-medium transition-all ${
+              subTab === "recommended"
+                ? "bg-primary text-background"
+                : "text-gray-400 hover:text-gray-200"
+            }`}
+          >
+            <Sparkles className="w-4 h-4 inline mr-2" />
+            推荐作者
+          </button>
+        </div>
+
+        {subTab === "subscribed" && (
+          <>
+            {notificationsEnabled && subscribedAuthors.length > 0 && (
+              <div className="flex items-center gap-3 p-4 mb-6 bg-primary/5 border border-primary/20 rounded-xl">
+                <BellRing className="w-5 h-5 text-primary shrink-0" />
+                <div className="flex-1 text-sm">
+                  <p className="text-gray-100 font-medium">订阅更新通知已开启</p>
+                  <p className="text-gray-400">关注的作者发布新作品时会及时提醒你</p>
                 </div>
-                <button
-                  onClick={() => handleUnsubscribe(author.id, author.name)}
-                  className="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                >
-                  <X className="w-4 h-4 mr-1" />
-                  取消订阅
-                </button>
               </div>
-            ))}
-          </div>
+            )}
+
+            {subscribedAuthors.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-lg font-semibold text-gray-100 mb-3 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  最近更新
+                </h3>
+                <div className="space-y-2">
+                  {recentUpdates
+                    .filter((u) => subscribedAuthors.some((a) => a.id === u.authorId))
+                    .map((update, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-3 p-3 bg-surface-light/50 rounded-lg border border-border/50"
+                      >
+                        <img
+                          src={update.avatarUrl}
+                          alt={update.authorName}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-100">
+                            <span className="font-medium">{update.authorName}</span>
+                            <span className="text-gray-400 ml-1">{update.content}</span>
+                          </p>
+                        </div>
+                        <span className="text-xs text-gray-500 shrink-0">{update.time}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {subscribedAuthors.length === 0 ? (
+              <div className="text-center py-16">
+                <UserPlus className="w-16 h-16 mx-auto text-gray-600 mb-4" />
+                <p className="text-gray-400">暂无订阅的作者</p>
+                <p className="text-gray-500 text-sm mt-1">切换到「推荐作者」发现更多创作者</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {subscribedAuthors.map((author) => (
+                  <div
+                    key={author.id}
+                    className="flex items-center gap-4 p-4 bg-surface rounded-xl border border-border hover:border-primary/30 transition-colors"
+                  >
+                    <img
+                      src={author.avatarUrl}
+                      alt={author.name}
+                      className="w-12 h-12 rounded-full object-cover"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-100">{author.name}</p>
+                      <p className="text-sm text-gray-400 truncate">{author.bio}</p>
+                      <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <ImageIcon className="w-3 h-3" />
+                          {author.wallpaperCount} 张壁纸
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Heart className="w-3 h-3" />
+                          {author.followerCount.toLocaleString()} 关注
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={handleViewWorks}
+                        className="btn-ghost text-primary hover:bg-primary/10"
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        查看作品
+                      </button>
+                      <button
+                        onClick={() => handleUnsubscribe(author.id, author.name)}
+                        className="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        取消订阅
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {subTab === "recommended" && (
+          <>
+            {recommendedAuthors.length === 0 ? (
+              <div className="text-center py-16">
+                <Sparkles className="w-16 h-16 mx-auto text-gray-600 mb-4" />
+                <p className="text-gray-400">暂时没有更多推荐作者</p>
+                <p className="text-gray-500 text-sm mt-1">你已经关注了所有作者</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {recommendedAuthors.map((author) => (
+                  <div
+                    key={author.id}
+                    className="p-5 bg-surface rounded-xl border border-border hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all"
+                  >
+                    <div className="flex items-start gap-4">
+                      <img
+                        src={author.avatarUrl}
+                        alt={author.name}
+                        className="w-14 h-14 rounded-full object-cover shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-100">{author.name}</p>
+                        <p className="text-sm text-gray-400 line-clamp-2 mt-0.5">{author.bio}</p>
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <ImageIcon className="w-3 h-3" />
+                            {author.wallpaperCount} 张
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            {author.followerCount.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        onClick={() => handleSubscribe(author.id, author.name)}
+                        className="btn-primary flex items-center gap-1.5 text-sm py-2 px-4"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        订阅
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

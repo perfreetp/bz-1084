@@ -35,6 +35,21 @@ const deviceTabs: { value: DeviceType; icon: typeof Monitor; label: string }[] =
   { value: "mobile", icon: Smartphone, label: "手机" },
 ];
 
+function buildSearchQuery(params: Record<string, string | string[] | undefined>): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "" && (Array.isArray(value) ? value.length > 0 : true)) {
+      if (Array.isArray(value)) {
+        value.forEach((v) => searchParams.append(key, v));
+      } else {
+        searchParams.set(key, value);
+      }
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `/search?${query}` : "/search";
+}
+
 export default function WallpaperDetail() {
   const { id } = useParams<{ id: string }>();
   const { getWallpaperById, getSimilarWallpapers } = useWallpaperStore();
@@ -102,7 +117,13 @@ export default function WallpaperDetail() {
   const handleDownload = (resolution: Resolution) => {
     if (!wallpaper) return;
     setSelectedResolution(resolution);
-    addDownload(wallpaper.id, resolution.name);
+    addDownload(
+      wallpaper.id,
+      resolution.name,
+      wallpaper.copyright.watermark,
+      wallpaper.title,
+      wallpaper.thumbnailUrl
+    );
     showToast({ type: "success", message: `开始下载 ${resolution.name} 版本` });
     setShowDownloadDropdown(false);
   };
@@ -232,7 +253,7 @@ export default function WallpaperDetail() {
               {wallpaper.tags.map((tag) => (
                 <Link
                   key={tag}
-                  to={`/search?tag=${tag}`}
+                  to={buildSearchQuery({ tag })}
                   className="tag"
                 >
                   #{tag}
@@ -244,9 +265,10 @@ export default function WallpaperDetail() {
               <span className="text-sm text-gray-400">主色调：</span>
               <div className="flex items-center gap-2">
                 {wallpaper.colors.map((color, i) => (
-                  <div
+                  <Link
                     key={i}
-                    className="w-6 h-6 rounded-full ring-2 ring-offset-2 ring-offset-background transition-transform hover:scale-110 cursor-pointer"
+                    to={buildSearchQuery({ color })}
+                    className="w-6 h-6 rounded-full ring-2 ring-offset-2 ring-offset-background transition-transform hover:scale-110 cursor-pointer block"
                     style={{ backgroundColor: color, ["--tw-ring-color" as any]: color }}
                     title={color}
                   />
